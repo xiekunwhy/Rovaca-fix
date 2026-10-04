@@ -103,7 +103,7 @@ static const uint32_t BAM_DATA_SIZE = 2048;
 static const uint32_t BAM_DATA_CAPACITY = sizeof(bam1_t) + BAM_DATA_SIZE;
 
 template <>
-bam1_t* RingMemPool<bam1_t>::alloc()
+inline bam1_t* RingMemPool<bam1_t>::alloc()
 {
     if (((tail_index_ + 1) & mask_) == head_index_) {
         return nullptr;  // Pool is full

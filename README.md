@@ -1,8 +1,10 @@
 # Rovaca-fix
 
+**[中文说明 / Chinese README](README_CN.md)**
+
 A community-patched build of **[ZephyRoy/Rovaca](https://github.com/ZephyRoy/Rovaca) v1.1.0** (a C++ re-implementation of GATK HaplotypeCaller), fixing **unbounded memory growth / OOM** on deep or complex genomes, and adding **CRAM input** and **CSI index** support — with no change to variant calls and no measurable slowdown.
 
-> **中文摘要**：本仓库是 Rovaca v1.1.0 的修复版。核心修复是 Dijkstra 路径搜索里一个导致内存随 region 数无限增长的节点泄漏（一行代码），外加 Writer 积压落盘兜底（`--write-tmp`，默认开）、内存占用优化（大队列砍容量、malloc 调优、`--index=false` 可关索引省数 GB）、CRAM 输入、超长染色体自动 CSI 索引、以及每 5 分钟内存日志。实测 77Mb 染色体 8 线程：RSS 从"6.9G+ 不封顶"变为"3.7G 平台"，运行时间不变，200 万行 GVCF 输出与原版逐字节一致。提供全静态编译的单文件二进制（x86-64，无需 root/依赖）。
+> **中文摘要**：本仓库是 Rovaca v1.1.0 的修复版。核心修复是 Dijkstra 路径搜索里一个导致内存随 region 数无限增长的节点泄漏（一行代码），外加 Writer 积压落盘兜底（`--write-tmp`，默认开）、内存占用优化（大队列砍容量、malloc 调优、`--index=false` 可关索引省数 GB）、CRAM 输入、超长染色体自动 CSI 索引、每 5 分钟内存日志，以及哈希 key 悬空指针（UAR）与头文件 ODR 两个上游正确性/工程问题的修复。实测 77Mb 染色体 8 线程：RSS 从"6.9G+ 不封顶"变为"3.7G 平台"，运行时间不变，200 万行 GVCF 输出与原版逐字节一致。提供全静态编译的单文件二进制（x86-64，无需 root/依赖）。
 
 ---
 
@@ -125,15 +127,15 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `bab94004419028c6a3749451cefef18fac90d526b71562db84322407f3902124`
+- sha256: `d11e95514957cbfef8ac127899417aa2f9ab2eb78de76b0a381e70d676d9d382`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 
 ## Known issues / notes for upstream
 
-- ASan also flags a **stack-use-after-return** in the assembler: `hc_assemble_vertex_sequence_spliter.c:212` stores the address of the stack local `bottom` as a hash key, later read by `hash.c:165` (`memcmp`) after the function returned. Not fixed here — worth upstream attention.
-- Several headers define non-`inline` functions (ODR violations); they make fully static linking depend on `-Wl,--allow-multiple-definition`. Marking them `inline` would be the clean fix.
 - The remaining memory profile after the leak fix is dominated by static pre-allocation (≈ 2×N × 140 MB RegionResources) — expected and bounded.
+- ~~ASan stack-use-after-return in the assembler hash (`hc_assemble_vertex_sequence_spliter.c:212` / `hash.c:165`)~~ **Fixed here**: `assemble_graph_hash_insert*` now copies the key into node-owned storage instead of aliasing caller memory (all three `&bottom`/`&run_vetex`-style sites were affected; ASan re-run is clean).
+- ~~Non-`inline` function definitions in headers (ODR violations)~~ **Fixed here**: 40+ definitions across `downsampler_hc.h`, `valid_file.h`, `ring_mem_pool.hpp`, `reads_filter_hc.h`, `reads_filter_lib.h`, `rovaca_tool.hpp`, `rovaca_tool_args.h` are now `inline`; the static build links **without** `-Wl,--allow-multiple-definition`.
 
 ## Credits & license
 

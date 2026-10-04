@@ -182,7 +182,7 @@ private:
 };
 
 // clang-format off
-RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
+inline RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
 {
     tool_name_ = argv[1];
     main_version_ = MAIN_VERSION;
@@ -256,7 +256,7 @@ RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
 }
 
 // clang-format off
-void RovacaToolArgs::usage()
+inline void RovacaToolArgs::usage()
 {
     std::cout << std::endl;
     std::cout << "Usage: rovaca <tool> [-option]" << std::endl;
@@ -295,7 +295,7 @@ void RovacaToolArgs::usage()
 }
 // clang-format on
 
-bool RovacaToolArgs::valid_check()
+inline bool RovacaToolArgs::valid_check()
 {
     // required option has checked.
     for (const auto& read_path : input_file_) {
@@ -308,7 +308,7 @@ bool RovacaToolArgs::valid_check()
     return true;
 }
 
-void RovacaToolArgs::valid_range(const std::string& name, int value, const argument_range& range)
+inline void RovacaToolArgs::valid_range(const std::string& name, int value, const argument_range& range)
 {
     if (value < range.min || value > range.max) {
         RovacaLogger::error("the argument for option: {}, out of range", name);

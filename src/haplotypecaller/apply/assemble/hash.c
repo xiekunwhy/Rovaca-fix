@@ -7,6 +7,8 @@
 
 #include "hash.h"
 
+#include <string.h>
+
 #include "debug.h"
 #include "utlist.h"
 
@@ -176,7 +178,13 @@ void* assemble_graph_hash_insert_with_key(p_assemble_graph_hash_table hashtable,
         return NULL;
     }
 
-    new_node->key = key;
+    /* 拷贝 key 内容到节点自有存储：调用方可能传入栈上临时变量（原实现仅存指针，存在 use-after-return 风险） */
+    new_node->key = ring_mempool_auto_enlarge_malloc(hashtable->recal_table_mem);
+    if (new_node->key == NULL) {
+        return NULL;
+    }
+    memcpy(new_node->key, key, keylen);
+    new_node->keylen = keylen;
     new_node->index = index;
     hashtable->new_node_memcpy(new_node, value, keylen, hashtable);
     new_node->index = index;
@@ -214,7 +222,13 @@ void* assemble_graph_hash_insert(p_assemble_graph_hash_table hashtable, void* ke
         return NULL;
     }
 
-    new_node->key = key;
+    /* 拷贝 key 内容到节点自有存储，原因同上 */
+    new_node->key = ring_mempool_auto_enlarge_malloc(hashtable->recal_table_mem);
+    if (new_node->key == NULL) {
+        return NULL;
+    }
+    memcpy(new_node->key, key, keylen);
+    new_node->keylen = keylen;
     new_node->index = index;
     hashtable->new_node_memcpy(new_node, value, keylen, hashtable);
     new_node->index = index;

@@ -72,7 +72,7 @@ public:
     uint32_t min_base_quality_;
     uint32_t interval_padding_;
 };
-RovacaTool::RovacaTool()
+inline RovacaTool::RovacaTool()
     : rovaca_args_(nullptr)
     , stream_pool_(nullptr)
     , bam_loader_(nullptr)
@@ -102,7 +102,7 @@ RovacaTool::RovacaTool()
     , interval_padding_(0)
 {}
 
-RovacaTool::~RovacaTool()
+inline RovacaTool::~RovacaTool()
 {
     bam_loader_.reset();
     filter_.reset();
@@ -110,13 +110,13 @@ RovacaTool::~RovacaTool()
     RovacaLogger::info("Rovaca-{} completed.", rovaca_args_->tool());
 }
 
-bool RovacaTool::initialize_args(int argc, char *argv[])
+inline bool RovacaTool::initialize_args(int argc, char *argv[])
 {
     rovaca_args_ = std::make_unique<RovacaToolArgs>(argc, argv);
     return rovaca_args_->valid_check();
 }
 
-bool RovacaTool::start_up()
+inline bool RovacaTool::start_up()
 {
     if (!initialize_stream_pool()) {
         RovacaLogger::error("failed to initialize stream pool");
@@ -143,14 +143,14 @@ bool RovacaTool::start_up()
     return streamer != nullptr;
 }
 
-void RovacaTool::run()
+inline void RovacaTool::run()
 {
     if (start_up()) {
         do_work();
     }
 }
 
-bool RovacaTool::initialize_stream_pool()
+inline bool RovacaTool::initialize_stream_pool()
 {
     const uint32_t wes_stream_pool_size = 4;
     wes_ = !interval_path_.empty();
@@ -160,7 +160,7 @@ bool RovacaTool::initialize_stream_pool()
     return stream_pool_->pool != nullptr;
 }
 
-bool RovacaTool::initialize_bam()
+inline bool RovacaTool::initialize_bam()
 {
     read_path_ = rovaca_args_->bam_path()[0];
     bam_loader_ = std::make_unique<BamLoader>(read_path_.c_str(), stream_pool_.get(), wes_);
@@ -202,7 +202,7 @@ bool RovacaTool::initialize_bam()
     return !(bam_loader_ == nullptr || merged_header_ == nullptr);
 }
 
-bool RovacaTool::initialize_regions()
+inline bool RovacaTool::initialize_regions()
 {
     interval_path_ = rovaca_args_->bed_path();
     interval_padding_ = rovaca_args_->interval_padding();
@@ -240,7 +240,7 @@ bool RovacaTool::initialize_regions()
     return !chr_list_.empty() && ret;
 }
 
-bool RovacaTool::initialize_reference()
+inline bool RovacaTool::initialize_reference()
 {
     reference_path_ = rovaca_args_->reference_path();
     FastaLoader::get_fasta_dict(reference_path_, &fast_dict_);
@@ -248,7 +248,7 @@ bool RovacaTool::initialize_reference()
     return !(fast_dict_.dict.empty() || fast_dict_.key.empty());
 }
 
-bool RovacaTool::matched_reference()
+inline bool RovacaTool::matched_reference()
 {
     if (bam_contigs_.size() != fast_dict_.dict.size()) {
         return false;
@@ -263,7 +263,7 @@ bool RovacaTool::matched_reference()
 }
 
 // set_target() supports two modes: complete WES reading and specified chromosome/region reading. WGS does not need to be set.
-const UniqueStream &RovacaTool::make_streamer()
+inline const UniqueStream &RovacaTool::make_streamer()
 {
     downsample_threshold_ = rovaca_args_->max_reads_depth();
     apply_downsampler_ = downsample_threshold_ != 0;

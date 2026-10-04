@@ -6,9 +6,9 @@
 
 #include <iostream>
 
-bool isFileExists(const std::string& path) { return access(path.c_str(), F_OK) == 0; }
-bool isFileReadable(const std::string& path) { return access(path.c_str(), R_OK) == 0; }
-bool isFileWritable(const std::string& path) { return access(path.c_str(), W_OK) == 0; }
+inline bool isFileExists(const std::string& path) { return access(path.c_str(), F_OK) == 0; }
+inline bool isFileReadable(const std::string& path) { return access(path.c_str(), R_OK) == 0; }
+inline bool isFileWritable(const std::string& path) { return access(path.c_str(), W_OK) == 0; }
 
 #define CHECK_FILE_EXIST(path)                             \
     do {                                                   \

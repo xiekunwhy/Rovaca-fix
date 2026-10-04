@@ -30,7 +30,7 @@ static int cigar_consumes_reference(uint32_t cigar) { return bam_cigar_type(ciga
  * @return true
  * @return false
  */
-bool ReadFilterLib::is_well_formed(bam1_t* read, bam_hdr_t* header)
+inline bool ReadFilterLib::is_well_formed(bam1_t* read, bam_hdr_t* header)
 {
     return valid_alignment_start(read) && valid_alignment_end(read) && has_read_group(read) && read_len_equal_cigar_len(read) &&
            matching_base_and_qual(read) && seq_is_stored(read) && alignment_agree_with_hdr(read, header);
@@ -44,7 +44,7 @@ bool ReadFilterLib::is_well_formed(bam1_t* read, bam_hdr_t* header)
  * @return true
  * @return false
  */
-bool ReadFilterLib::is_good_cigar(bam1_t* read)
+inline bool ReadFilterLib::is_good_cigar(bam1_t* read)
 {
     uint32_t* cigar = bam_get_cigar(read);
     int n_cigar = read->core.n_cigar;
@@ -81,7 +81,7 @@ bool ReadFilterLib::is_good_cigar(bam1_t* read)
  * @return true
  * @return false
  */
-bool ReadFilterLib::valid_alignment_start(bam1_t* read) { return (read->core.pos >= 0); }
+inline bool ReadFilterLib::valid_alignment_start(bam1_t* read) { return (read->core.pos >= 0); }
 
 /**
  * @brief 判断比对终止位置是否合法.
@@ -89,7 +89,7 @@ bool ReadFilterLib::valid_alignment_start(bam1_t* read) { return (read->core.pos
  * @return true
  * @return false
  */
-bool ReadFilterLib::valid_alignment_end(bam1_t* read) { return (bam_endpos(read) >= read->core.pos); }
+inline bool ReadFilterLib::valid_alignment_end(bam1_t* read) { return (bam_endpos(read) >= read->core.pos); }
 
 /**
  * @brief 判断read的染色体id正常并且起始点没超出的染色体长度范围.
@@ -98,7 +98,7 @@ bool ReadFilterLib::valid_alignment_end(bam1_t* read) { return (bam_endpos(read)
  * @return true
  * @return false
  */
-bool ReadFilterLib::alignment_agree_with_hdr(bam1_t* read, bam_hdr_t* header)
+inline bool ReadFilterLib::alignment_agree_with_hdr(bam1_t* read, bam_hdr_t* header)
 {
     return (read->core.tid >= 0) && (read->core.tid < header->n_targets) && (read->core.pos <= *(header->target_len + read->core.tid));
 }
@@ -109,7 +109,7 @@ bool ReadFilterLib::alignment_agree_with_hdr(bam1_t* read, bam_hdr_t* header)
  * @return true
  * @return false
  */
-bool ReadFilterLib::has_read_group(bam1_t* read)
+inline bool ReadFilterLib::has_read_group(bam1_t* read)
 {
     uint8_t* rg = bam_aux_get(read, "RG");
     return (rg != NULL);
@@ -121,7 +121,7 @@ bool ReadFilterLib::has_read_group(bam1_t* read)
  * @return true
  * @return false
  */
-bool ReadFilterLib::matching_base_and_qual(bam1_t* read)
+inline bool ReadFilterLib::matching_base_and_qual(bam1_t* read)
 {
     return read->core.l_qseq == 0 || bam_get_qual(read)[0] != 0xff; ;
 }
@@ -132,7 +132,7 @@ bool ReadFilterLib::matching_base_and_qual(bam1_t* read)
  * @return true
  * @return false
  */
-bool ReadFilterLib::read_len_equal_cigar_len(bam1_t* read)
+inline bool ReadFilterLib::read_len_equal_cigar_len(bam1_t* read)
 {
     return (read->core.l_qseq == bam_cigar2qlen(read->core.n_cigar, bam_get_cigar(read)));
 }
@@ -143,7 +143,7 @@ bool ReadFilterLib::read_len_equal_cigar_len(bam1_t* read)
  * @return true
  * @return false
  */
-bool ReadFilterLib::seq_is_stored(bam1_t* read) { return (read->core.l_qseq > 0); }
+inline bool ReadFilterLib::seq_is_stored(bam1_t* read) { return (read->core.l_qseq > 0); }
 
 /**
  * @brief 判断cigar首尾是否是deletion，不考虑clip.
@@ -151,7 +151,7 @@ bool ReadFilterLib::seq_is_stored(bam1_t* read) { return (read->core.l_qseq > 0)
  * @return true, 正常
  * @return false，需要过滤
  */
-bool ReadFilterLib::is_first_last_cigar_deletion(bam1_t* read)
+inline bool ReadFilterLib::is_first_last_cigar_deletion(bam1_t* read)
 {
     uint32_t* cigar = bam_get_cigar(read);
     int n_cigar = read->core.n_cigar;

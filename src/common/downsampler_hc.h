@@ -75,7 +75,7 @@ static uint32_t compair_reads_coordinates(bam1_t* one, bam1_t* other)
     return 0;
 }
 
-uint32_t HCDownsampler::apply_random_method(uint32_t bound)
+inline uint32_t HCDownsampler::apply_random_method(uint32_t bound)
 {
     int32_t r;
     int32_t m;
@@ -97,7 +97,7 @@ uint32_t HCDownsampler::apply_random_method(uint32_t bound)
     return r;
 }
 
-uint32_t HCDownsampler::apply_random_method_next(uint32_t bits)
+inline uint32_t HCDownsampler::apply_random_method_next(uint32_t bits)
 {
     uint64_t nextseed;
     uint64_t seed = hc_random_seed;
@@ -114,7 +114,7 @@ uint32_t HCDownsampler::apply_random_method_next(uint32_t bits)
     return ret;
 }
 
-HCDownsampler::HCDownsampler(uint32_t target_sample_size)
+inline HCDownsampler::HCDownsampler(uint32_t target_sample_size)
     : target_coverage(target_sample_size)
     , finalized_items({})
     , reservoir({})
@@ -126,9 +126,9 @@ HCDownsampler::HCDownsampler(uint32_t target_sample_size)
     // finalized_items.reserve(50);
 }
 
-HCDownsampler::~HCDownsampler() {}
+inline HCDownsampler::~HCDownsampler() {}
 
-bam1_t* HCDownsampler::submit(bam1_t* item)
+inline bam1_t* HCDownsampler::submit(bam1_t* item)
 {
     bam1_t* ret;
     if (item == nullptr) {
@@ -168,17 +168,17 @@ bam1_t* HCDownsampler::submit(bam1_t* item)
     return nullptr;
 }
 
-bool HCDownsampler::has_finalized_items() { return !finalized_items.empty(); }
+inline bool HCDownsampler::has_finalized_items() { return !finalized_items.empty(); }
 
-int HCDownsampler::consume_finalized_items(std::list<bam1_t*>& cache)
+inline int HCDownsampler::consume_finalized_items(std::list<bam1_t*>& cache)
 {
     cache = std::move(finalized_items);
     return (int)cache.size();
 }
 
-void HCDownsampler::input_end_signal() { finalize_reservoir(false); }
+inline void HCDownsampler::input_end_signal() { finalize_reservoir(false); }
 
-void HCDownsampler::handle_positional_change(bam1_t* read)
+inline void HCDownsampler::handle_positional_change(bam1_t* read)
 {
     if (previous_reads != nullptr) {
         int read_cmp = compair_reads_coordinates(previous_reads, read);
@@ -191,7 +191,7 @@ void HCDownsampler::handle_positional_change(bam1_t* read)
     }
 }
 
-void HCDownsampler::finalize_reservoir(bool expect)
+inline void HCDownsampler::finalize_reservoir(bool expect)
 {
     eof_input_stream = true;
 

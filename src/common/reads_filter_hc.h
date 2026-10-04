@@ -39,7 +39,7 @@ private:
     uint32_t filterd_reads_count{0};
 };
 
-HCReadFilter::HCReadFilter(bam_hdr_t* hdr, bool inspect)
+inline HCReadFilter::HCReadFilter(bam_hdr_t* hdr, bool inspect)
     : ReadFilter(hdr)
     , inspect_(inspect)
 {
@@ -48,7 +48,7 @@ HCReadFilter::HCReadFilter(bam_hdr_t* hdr, bool inspect)
     max_mqual = HC_READ_FILTER_MAXMQ;
 }
 
-HCReadFilter::HCReadFilter(bam_hdr_t* hdr, int flags, int map_qual)
+inline HCReadFilter::HCReadFilter(bam_hdr_t* hdr, int flags, int map_qual)
     : ReadFilter(hdr)
 {
     flag = flags;
@@ -56,13 +56,13 @@ HCReadFilter::HCReadFilter(bam_hdr_t* hdr, int flags, int map_qual)
     max_mqual = HC_READ_FILTER_MAXMQ;
 }
 
-bool HCReadFilter::read_mapq_check(bam1_t* read)
+inline bool HCReadFilter::read_mapq_check(bam1_t* read)
 {
     bool ret = (read->core.qual >= min_mqual) && (read->core.qual < max_mqual);
     return ret;
 }
 
-bool HCReadFilter::test(bam1_t* read)
+inline bool HCReadFilter::test(bam1_t* read)
 {
     if (!read) {
         return false;

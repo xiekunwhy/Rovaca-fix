@@ -68,9 +68,8 @@ target_link_options(${PACK_NAME} PRIVATE ${PACK_LINK_OPT})
 
 add_executable(${PROJECT_NAME} main.cpp)
 if(ROVACA_STATIC)
-    # 全静态：--whole-archive 保证静态初始化（工具注册表）不被丢弃；
-    # --allow-multiple-definition 容忍头文件内非 inline 函数定义（ODR，见 README）
-    target_link_options(${PROJECT_NAME} PRIVATE -static -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
+    # 全静态：--whole-archive 保证静态初始化（工具注册表）不被丢弃
+    target_link_options(${PROJECT_NAME} PRIVATE -static -static-libgcc -static-libstdc++)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         -Wl,--whole-archive
         main IOStream haplotypecaller logger region assemble genotype writer pairhmm utils base bqsr
