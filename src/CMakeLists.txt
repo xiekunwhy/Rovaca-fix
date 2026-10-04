@@ -3,10 +3,16 @@ generate_version()
 
 set(ROVACA_USE_BUNDLED_BOOST OFF)
 set(BOOST_PROGRAM_OPTIONS_INSTALL_LIB "")
-set(ROVACA_BUNDLED_BOOST_LIB "${CMAKE_SOURCE_DIR}/libboost_program_options.so.1.83.0")
+if(ROVACA_STATIC)
+    set(ROVACA_BUNDLED_BOOST_LIB "${CMAKE_SOURCE_DIR}/third_lib/static-deps/lib/libboost_program_options.a")
+else()
+    set(ROVACA_BUNDLED_BOOST_LIB "${CMAKE_SOURCE_DIR}/libboost_program_options.so.1.83.0")
+endif()
 
-find_package(Boost ${MIN_BOOST_VERSION} QUIET COMPONENTS program_options)
-if(Boost_FOUND AND Boost_PROGRAM_OPTIONS_FOUND)
+if(NOT ROVACA_STATIC)
+    find_package(Boost ${MIN_BOOST_VERSION} QUIET COMPONENTS program_options)
+endif()
+if(NOT ROVACA_STATIC AND Boost_FOUND AND Boost_PROGRAM_OPTIONS_FOUND)
     message(STATUS "* * * * * * * * * * * system boost version: ${Boost_LIB_VERSION} * * * * * * * * * * *")
 else()
     if(EXISTS "${ROVACA_BUNDLED_BOOST_LIB}")
@@ -21,7 +27,7 @@ else()
         if(NOT Boost_INCLUDE_DIRS)
             find_path(ROVACA_BOOST_INCLUDE_DIR
                 NAMES boost/program_options.hpp
-                PATHS /usr/include /usr/local/include ${CMAKE_SOURCE_DIR}/third_lib/boost/include)
+                PATHS /usr/include /usr/local/include ${CMAKE_SOURCE_DIR}/third_lib/boost/include ${CMAKE_SOURCE_DIR}/third_lib/static-deps/include)
             if(ROVACA_BOOST_INCLUDE_DIR)
                 set(Boost_INCLUDE_DIRS "${ROVACA_BOOST_INCLUDE_DIR}")
             else()
@@ -54,14 +60,25 @@ else()
     set(PACK_LINK_LIB ${PACK_LINK_LIB} ${Boost_LIBRARIES})
 endif()
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC})
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC})
 target_include_directories(${PACK_NAME} PRIVATE ${PACK_INCLUDE_DIR})
 target_link_directories(${PACK_NAME} PRIVATE ${PACK_LINK_DIR})
 target_link_libraries(${PACK_NAME} PRIVATE ${PACK_LINK_LIB})
 target_link_options(${PACK_NAME} PRIVATE ${PACK_LINK_OPT})
 
 add_executable(${PROJECT_NAME} main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE main)
+if(ROVACA_STATIC)
+    # 全静态：--whole-archive 保证静态初始化（工具注册表）不被丢弃；
+    # --allow-multiple-definition 容忍头文件内非 inline 函数定义（ODR，见 README）
+    target_link_options(${PROJECT_NAME} PRIVATE -static -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        -Wl,--whole-archive
+        main IOStream haplotypecaller logger region assemble genotype writer pairhmm utils base bqsr
+        -Wl,--no-whole-archive
+        pthread dl)
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE main)
+endif()
 
 if(ENABLE_ASAN)
     include(asan)

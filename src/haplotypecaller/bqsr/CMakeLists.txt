@@ -7,7 +7,7 @@ set(PackSrc
 
 add_library(
     ${PackName}
-    SHARED
+    ${ROVACA_LIB_TYPE}
     ${PackSrc}
 )
 

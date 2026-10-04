@@ -1,6 +1,7 @@
 #include "rovaca_main.h"
 
 #include <iostream>
+#include <malloc.h>
 
 #include "rovaca_logger.h"
 #include "rovaca_signal_handler.h"
@@ -8,6 +9,10 @@
 
 int rovaca_main(int argc, char* argv[])
 {
+    // 限制 glibc 多线程 arena 数量，大块分配走 mmap（free 后立即归还 OS），抑制 RSS 随运行时间膨胀
+    mallopt(M_ARENA_MAX, 2);
+    mallopt(M_MMAP_THRESHOLD, 128 * 1024);
+
     RovacaLogger::init_assemble_ptr();
     RovacaLogger::set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] [%s:%!:%#] %v.");
 

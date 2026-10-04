@@ -1,87 +1,142 @@
-# Rovaca
+# Rovaca-fix
 
-## Introduction
+A community-patched build of **[ZephyRoy/Rovaca](https://github.com/ZephyRoy/Rovaca) v1.1.0** (a C++ re-implementation of GATK HaplotypeCaller), fixing **unbounded memory growth / OOM** on deep or complex genomes, and adding **CRAM input** and **CSI index** support — with no change to variant calls and no measurable slowdown.
 
-Rovaca is a tool for detecting SNPs (Single Nucleotide Polymorphisms) and INDELs (Insertions/Deletions) from DNA sequencing data in a single sample. It is a probabilistic model-based variant detection algorithm designed to accurately identify variants in samples.
+> **中文摘要**：本仓库是 Rovaca v1.1.0 的修复版。核心修复是 Dijkstra 路径搜索里一个导致内存随 region 数无限增长的节点泄漏（一行代码），外加 Writer 积压落盘兜底（`--write-tmp`，默认开）、内存占用优化（大队列砍容量、malloc 调优、`--index=false` 可关索引省数 GB）、CRAM 输入、超长染色体自动 CSI 索引、以及每 5 分钟内存日志。实测 77Mb 染色体 8 线程：RSS 从"6.9G+ 不封顶"变为"3.7G 平台"，运行时间不变，200 万行 GVCF 输出与原版逐字节一致。提供全静态编译的单文件二进制（x86-64，无需 root/依赖）。
 
-The working principles of Rovaca are as follows:
+---
 
-1. **Identifying active regions**: The program determines which regions of the genome (active regions) to process based on the presence of evidence for variants.
-2. **Determining haplotypes through assembly of active regions**: Rovaca uses a local de-novo assembly method to split sequencing data into smaller fragments (haplotypes). These fragments are DNA segments caused by potential variants. The program then uses the Smith-Waterman algorithm to realign each haplotype with the reference haplotype to identify potential variant sites.
-3. **Pairwise alignment using PairHMM**: For each active region, the program performs pairwise alignment for each read of each haplotype using the PairHMM algorithm. This produces a likelihood matrix of haplotypes given the read data. These likelihoods are then marginalized to obtain the likelihood of each allele at each potential variant site given the read data.
-4. **Variant calling using Bayesian inference**: For each potential variant site, the program applies Bayes' rule, using the likelihood of alleles given the read data to calculate the likelihood of each genotype for each sample given the read data for that sample. The most likely genotype is then assigned to the sample.
+## Why this fork exists
 
-Rovaca offers high sensitivity and specificity, capable of accurately detecting variants in complex genomic regions. It can also process multi-sample data, performing joint variant detection to improve accuracy.
+Rovaca v1.1.0 reproduces GATK HaplotypeCaller results ~60x faster, but on real non-model genomes (deep WGS, pool-seq) its memory **grows linearly with runtime until the kernel OOM-killer stops it** ([issue #3](https://github.com/ZephyRoy/Rovaca/issues/3) — 48 GB → 256 GB was still not enough).
 
-## Prerequisites
+We profiled it end-to-end and fixed the root causes. All fixes are in this repository as ordinary source changes (see `rovaca-oom-fix.patch` for the equivalent unified diff).
 
-- **System requirements**: Intel or AMD x86 system with at least **AVX2** support.
-- **glibc version**: >=2.17
-- **For best performance**: AVX512 is recommended.
-- **Checking compatibility**: Run the following command to check AVX support:
+## Headline results
 
-  ```sh
-  lscpu | grep avx
-  ```
+Same machine, same data (Tm211, *Tamarix chinensis*, ~90x WGS), full chr12 (77 Mb), GVCF mode, 8 threads:
 
-## Installation
+| Metric | v1.1.0 (original) | v1.1.0-fix (this repo) |
+|---|---|---|
+| RSS over the run | 2.9 → **6.9 GB, still climbing ~180 MB/min** | 3.1 → **3.7 GB, flat plateau** |
+| Runtime | ~21 min | ~21 min (no regression) |
+| GVCF output | baseline | **byte-identical (0 diffs in 2M+ lines)** |
+| Projected whole-genome peak (63 contigs) | unbounded (OOM at 36-256 GB reported) | ~4-8 GB at 8-10 threads |
 
-We strongly recommend users to **download the released version** for ease of use. However, if you prefer to compile from the source code, follow these steps:
+Memory stats are now observable at runtime: the writer logs `mem stats: rss=... backlog=... spilled=...` every 5 minutes.
 
-1. Ensure you have **libboost** version **>=1.69.0** installed.
-2. Clone the repository and navigate to the source directory.
-3. Use the provided script to build the software:
+## What was broken and what we fixed
 
-   ```sh
-   ./build_dev.sh
-   ```
+### 1. The big one: per-region leak in the Dijkstra path finder (root cause of the OOM)
+
+Found with [heaptrack](https://github.com/KDE/heaptrack) (2.19 GB of peak consumption traced to one allocation site).
+
+- The best-path search loop in `hc_assemble_dijkstra_find_best_haplotypes` exits as soon as the result cap is reached, **leaving all remaining path nodes in the rb-tree queue**.
+- The queue purge `hc_assemble_dijkstra_reset_tree` erased those nodes and freed their edge lists — **but never freed the path nodes themselves**.
+- The underlying `mem_pool_fast` keeps its pages forever, so every leftover node was permanently retained. Complex regions (deep/pooled/non-model data) can leave thousands of nodes per region → arena grows linearly forever.
+
+**Fix:** one line — return the erased node to the pool's free list in the purge loop (`hc_assemble_dijkstra_shortest_path.c`). Runtime unchanged; output byte-identical.
+
+### 2. Writer backlog OOM protection was never wired up
+
+The Writer must emit results in global `source_id` order; out-of-order results were buffered **without bound** — a single slow region could pile up tens of GB. v1.1.0 already had a spill-to-disk escape hatch, but:
+
+- `--write-tmp` was defined but **never registered** in the option parser (passing it errored out), and the backing flag was an **uninitialized bool** → spill effectively disabled.
+- The spill threshold counter was incremented on every pop but never decremented for in-order writes (broken semantics).
+- If a temp-file write failed, the result was **silently dropped** from the output VCF.
+
+**Fix:** `--write-tmp` registered and **on by default** (`--write-tmp=false` to disable); backlog counter now counts real backlog; write failures keep data in memory instead of losing it; read-back is verified; spill activity is logged. Writer memory is now bounded (~128 full result texts, rest goes to temp files next to the output, auto-cleaned).
+
+### 3. Footprint reductions
+
+- `result_queue` capacity 2048 → 128 (was the largest transient buffer: 2048 × multi-MB GVCF texts ≈ up to ~10 GB on heterozygous genomes).
+- `mallopt(M_ARENA_MAX, 2)` + `M_MMAP_THRESHOLD=128K` at startup: big allocations go to mmap and are returned to the OS on free, instead of accumulating in per-thread glibc arenas.
+- `--index=false`: skip the in-process tabix index build (htslib accumulates all index records in memory — several GB on large/heterozygous genomes). Rebuild afterwards with `tabix -p vcf out.vcf.gz`. (`--index` itself was also broken upstream: hidden from help and inverted; now fixed and documented.)
+
+### 4. CSI index support (output side)
+
+TBI cannot index contigs ≥ 2^29 bp — on such genomes the run would previously die mid-write after hours of compute. The writer now detects long contigs and **automatically switches to CSI** (`.csi`, tabix-compatible meta). Verified with `tabix -l` and region queries on VCF and GVCF output. BAM/CRAM input indexes (`.bai`/`.csi`/`.crai`) were already handled by htslib.
+
+### 5. CRAM input support
+
+The loader never passed the reference to htslib, so CRAM input could not decode. It now sets `-R` via `hts_set_fai_filename()` — `-I sample.cram` (+ `.crai`) works with the reference you already provide; no `REF_PATH`/network needed. Verified: CRAM vs BAM runs are byte-identical.
+
+### 6. Build & portability
+
+- `assemble_argument.h`: added missing `#include <cstdint>` (fails with GCC 13 + Boost 1.83 headers otherwise).
+- New `ROVACA_STATIC` CMake option + `build_static.sh`: reproducible fully-static single-file binary (see below).
+
+## Verification
+
+- **Output equivalence**: 2M+-line GVCF diff of fixed vs. original build: **0 differences**. Static vs. dynamic builds show only a ±0.001 QUAL last-bit FP jitter at 2 sites (calls, genotypes, PLs identical — same class as GATK's native-vs-Java PairHMM note).
+- **Regression suite** (synthetic diploid set, 48 designed SNPs/indels, 12 contigs): VCF/GVCF modes, CRAM input, TBI default, `--index=false`, help text — 9/9 pass.
+- **Spill stress test** (threshold forced to 0): 250 results spilled → read back → output byte-identical, temp files cleaned.
+- **Speed**: identical runtime on real-data chr12 (Rovaca's ~60x-vs-GATK performance is untouched).
 
 ## Usage
 
-```sh
-# Basic usage with required parameters
-rovaca <tool> <options>
+```bash
+rovaca HaplotypeCaller \
+  -I sample.bam -R ref.fa -O sample.g.vcf.gz \
+  --emit-ref-confidence GVCF \
+  --nthreads 10 \
+  --index=false          # optional: save index memory; run `tabix -p vcf sample.g.vcf.gz` afterwards
 ```
 
-Currently, only HaplotypeCaller is supported as a tool; other tools may be integrated as needed in the future.
+Recommendations:
 
-### Parameters
+- `--max-reads-depth` defaults to 50, identical to GATK's `--max-reads-per-alignment-start` default — leave it alone for GATK-comparable results (and for your memory budget).
+- 4-10 threads per job is plenty; memory now stays in single-digit GB.
+- On very large/deep genomes, per-chromosome sharding with `-L chr.bed` remains a good practice (job arrays).
+- Requirements: x86-64 Linux, CPU with AVX2 (AVX-512 preferred). BAM and CRAM input; TBI/CSI output indexes chosen automatically.
 
-```sh
--H, --help                                    Display help information
--V, --version                                 Display version information
--I, --input <file1> <file2> ...               Input file path(s), multiple files can be specified
--O, --output <file>                           Output file path, required parameter
--R, --reference <file>                        Reference file path, required parameter
--L, --interval <file>                         Interval file path
--P, --interval-padding <value>                Size to expand intervals on both sides, non-negative integer, default: 0
--D, --max-reads-depth <value>                 Maximum number of reads at each alignment start position, non-negative integer, default: 50
--Q, --base-quality-score-threshold <value>    Minimum base quality score threshold, [6, 127], default: 18
--G, --gvcf-gq-bands <value1> <value2> ...     Specify GQ boundaries for merging non-variant sites in GVCF mode, [1, 100], default: [1, 2, 3,... 60, 70, 80, 90, 99]
---nthreads <value>                            Number of threads to start, [1, 128], default: 30
---pcr-indel-model <value>                     PCR indel model, default: CONSERVATIVE, options: {NONE, HOSTILE, CONSERVATIVE, AGGRESSIVE}
---emit-ref-confidence <value>                 Reference confidence model, default: NONE, options: {NONE, GVCF}
---nstreampool <value>                         Iostream pool size, [1, 20], default: 10, usually does not need to be specified
---inspect-reads                               Strictly verify each read in the input BAM file, default: false
---bqsr-recal-table <file>                     Specify the recalibration.table file for Base Quality Score Recalibration (BQSR)
---compression-level <value>                   Compression level of the output file, only effective for gz files, [0-9], default: 6
+## Building
+
+### Standard (dynamic) build
+
+Prerequisites: GCC ≥ 9, CMake ≥ 3.16, Boost ≥ 1.69 headers + `program_options` library.
+
+```bash
+git clone https://github.com/xiekunwhy/Rovaca-fix.git
+cd Rovaca-fix
+mkdir build && cd build
+cmake -DCMAKE_INSTALL_PREFIX=../release ..
+make -j$(nproc) && make install   # binary + bundled libs under release/lib/
 ```
 
-## Examples
+If Boost headers are **not** in a standard location (`/usr/include`), point the compiler at them before `make` (some modules resolve them only via the include path):
 
-Here are some example commands for running Rovaca:
-
-```sh
-# Basic usage with required parameters
-rovaca HaplotypeCaller -I sample.bam -O output.vcf -R reference.fasta
-
-# Running with interval padding and multiple threads
-rovaca HaplotypeCaller -I sample.bam -O output.vcf -R reference.fasta -P 100 --nthreads 16
-
-# Generating GVCF output
-rovaca HaplotypeCaller -I sample.bam -O output.g.vcf -R reference.fasta --emit-ref-confidence GVCF
+```bash
+export CPLUS_INCLUDE_PATH=/path/to/boost/include
 ```
 
-## Additional Information
+Tip for root-less machines: running `bash build_static.sh` once also drops Boost headers into `third_lib/static-deps/include`, which both the static and the dynamic configure steps pick up automatically.
 
-For further details and updates, please refer to the official documentation or reach out to the development team.
+### Fully static build (single file, no root needed)
+
+```bash
+bash build_static.sh        # fetches deps into third_lib/static-deps (not committed)
+# -> build/bin/rovaca       # statically linked, runs on kernel >= 3.2, glibc-independent
+```
+
+`build_static.sh` downloads zlib/bzip2/xz/Boost static archives and Boost headers via `apt download` (no root), builds htslib 1.18 statically, then configures with `-DROVACA_STATIC=ON`. On non-Debian systems, place the equivalent `.a` files and headers into `third_lib/static-deps/{lib,include}` first.
+
+## Prebuilt binary
+
+See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
+
+- sha256: `bab94004419028c6a3749451cefef18fac90d526b71562db84322407f3902124`
+- Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
+- `scp` it to your cluster, `chmod +x rovaca`, run.
+
+## Known issues / notes for upstream
+
+- ASan also flags a **stack-use-after-return** in the assembler: `hc_assemble_vertex_sequence_spliter.c:212` stores the address of the stack local `bottom` as a hash key, later read by `hash.c:165` (`memcmp`) after the function returned. Not fixed here — worth upstream attention.
+- Several headers define non-`inline` functions (ODR violations); they make fully static linking depend on `-Wl,--allow-multiple-definition`. Marking them `inline` would be the clean fix.
+- The remaining memory profile after the leak fix is dominated by static pre-allocation (≈ 2×N × 140 MB RegionResources) — expected and bounded.
+
+## Credits & license
+
+- Upstream: [ZephyRoy/Rovaca](https://github.com/ZephyRoy/Rovaca) (MIT), authors of the underlying GATK-HaplotypeCaller C++ re-implementation.
+- Fixes, profiling and static build: [@xiekunwhy](https://github.com/xiekunwhy) with an AI pair-programming assistant, debugging together in [issue #3](https://github.com/ZephyRoy/Rovaca/issues/3).
+- License: MIT (same as upstream).

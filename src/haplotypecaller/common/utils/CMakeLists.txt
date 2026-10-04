@@ -4,7 +4,7 @@ set(PACK_INCLUDE_DIR ../base/include ${HTSLIB_INCLUDE_DIR} ${SPDLOG_INCLUDE_DIR}
 set(PACK_LINK_DIR)
 set(PACK_LINK_LIB pthread logger)
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC})
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC})
 target_include_directories(${PACK_NAME} PUBLIC ${PACK_INCLUDE_DIR})
 target_link_directories(${PACK_NAME} PUBLIC ${PACK_LINK_DIR})
 target_link_libraries(${PACK_NAME} PUBLIC ${PACK_LINK_LIB})

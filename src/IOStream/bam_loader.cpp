@@ -88,6 +88,16 @@ void BamLoader::set_target(const char* targets)
     }
 }
 
+void BamLoader::set_reference_fai(const char* fasta_path)
+{
+    for (int i = 0; i < nfiles; i++) {
+        if (hts_set_fai_filename(bam_fp[i], fasta_path) != 0) {
+            RovacaLogger::error("failed to set reference fasta for CRAM decoding: {}", fasta_path);
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
 bool BamLoader::has_next() { return !(all_finished && reads_cache.empty()); }
 
 bam1_t* BamLoader::get_next_read(int& min_index)

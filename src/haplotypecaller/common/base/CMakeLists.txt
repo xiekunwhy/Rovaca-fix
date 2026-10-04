@@ -22,7 +22,7 @@ add_library(ro_sw_avx512_obj OBJECT
 target_compile_options(ro_sw_avx512_obj PRIVATE -mavx -mavx2 -mavx512f -mavx512dq -mavx512bw -mavx512vl -fgnu89-inline)
 target_include_directories(ro_sw_avx512_obj PRIVATE ${PACK_INCLUDE_DIR})
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC} $<TARGET_OBJECTS:ro_sw_avx2_obj> $<TARGET_OBJECTS:ro_sw_avx512_obj>)
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC} $<TARGET_OBJECTS:ro_sw_avx2_obj> $<TARGET_OBJECTS:ro_sw_avx512_obj>)
 target_compile_options(${PACK_NAME} PRIVATE -mavx -mavx2 -fgnu89-inline)
 target_include_directories(${PACK_NAME} PUBLIC ${PACK_INCLUDE_DIR})
 target_link_directories(${PACK_NAME} PUBLIC ${PACK_LINK_DIR})

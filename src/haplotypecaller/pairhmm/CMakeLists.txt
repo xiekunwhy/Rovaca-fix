@@ -59,7 +59,7 @@ set(RODV_ADAPTER_SRC roDV_adapter/rovaca_pool_allocator.h)
 set(RODV_SCHEDULE_SRC roDV_schedule.h roDV_schedule.cpp)
 set(PACK_SRC ${RODV_COMMON_SRC} ${RODV_INTER_HEADERS} ${RODV_INTRA_HEADERS} ${RODV_ADAPTER_SRC} ${RODV_SCHEDULE_SRC} pairhmm_engine.cpp pairhmm_engine.h pairhmm_internal.cpp pairhmm_internal.h)
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC})
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC})
 target_sources(${PACK_NAME} PRIVATE
     $<TARGET_OBJECTS:rodv_inter_avx2_obj>
     $<TARGET_OBJECTS:rodv_inter_avx512_obj>

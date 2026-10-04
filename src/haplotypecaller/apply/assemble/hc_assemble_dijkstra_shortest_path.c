@@ -105,6 +105,7 @@ static void hc_assemble_dijkstra_reset_tree(p_assemble_dijkstra_path graph)
             mem_pool_fast_free(graph->path_node_buffer, item);
         }
         rb_erase(node, queue);
+        mem_pool_fast_free(graph->path_pool, path); /* 队列中残留的路径节点本身也必须归还 free list */
     }
     mem_pool_fast_reset(graph->path_node_buffer);
 }

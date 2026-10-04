@@ -6,6 +6,7 @@
 #include <cstring>
 #include <exception>
 #include <fstream>
+#include <malloc.h>
 #include <map>
 #include <sstream>
 #include <string>
@@ -19,6 +20,7 @@
 #include "htslib/hts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
+#include "htslib/tbx.h"
 #include "htslib/vcf.h"
 #include "rovaca_logger.h"
 #include "writer.h"
@@ -50,6 +52,23 @@ static inline size_t number_of_digits(int64_t n)
         ++count;
     } while (n != 0);
     return count;
+}
+
+static void log_writer_mem_stats(size_t backlog_count, size_t spill_count)
+{
+    // 从 /proc 读取 RSS（对任何内存分配器都有效），加上 Writer 侧积压/落盘计数
+    std::ifstream status("/proc/self/status");
+    std::string line;
+    long rss_kb = -1;
+    while (std::getline(status, line)) {
+        if (line.rfind("VmRSS:", 0) == 0) {
+            rss_kb = std::atol(line.c_str() + 6);
+            break;
+        }
+    }
+    RovacaLogger::info("mem stats: rss={} MB, writer backlog={}, spilled={}", rss_kb >> 10, backlog_count, spill_count);
+    // 定期把 arena 顶部空闲页归还 OS，缓解碎片化导致的 RSS 单调上涨
+    malloc_trim(0);
 }
 
 Writer::Writer(bool index, int32_t compression_level, pHCArgs args, bam_hdr_t *bam_hdr, htsThreadPool *tp,
@@ -96,7 +115,17 @@ bool Writer::start()
         const char *level_to_model[10]{"wz0", "wz1", "wz2", "wz3", "wz4", "wz5", "wz", "wz7", "wz8", "wz9"};
         mode = level_to_model[compression_level_];
         if (index_) {
-            args_->idx_name = std::string(args_->output) + ".tbi";
+            // TBI 单条 contig 上限 2^29 bp，超过则改用 CSI
+            for (int32_t i = 0; i < bam_hdr_->n_targets; ++i) {
+                if (static_cast<int64_t>(bam_hdr_->target_len[i]) >= (1LL << 29)) {
+                    csi_ = true;
+                    break;
+                }
+            }
+            args_->idx_name = std::string(args_->output) + (csi_ ? ".csi" : ".tbi");
+            if (csi_) {
+                RovacaLogger::info("contig length exceeds the TBI limit (2^29 bp); building CSI index instead.");
+            }
         }
     }
     else {
@@ -161,19 +190,24 @@ void Writer::merge_task_thread_call()
     CHECK_CONDITION_EXIT(ret != 0, "write header: {}", std::strerror(errno));
 
     if (!args_->idx_name.empty()) {
-        ret = bcf_idx_init(out_.out_file, out_.hdr, 0, args_->idx_name.c_str());
+        ret = bcf_idx_init(out_.out_file, out_.hdr, csi_ ? 14 : 0, args_->idx_name.c_str());
         CHECK_CONDITION_EXIT(ret != 0, "failed to initialise index for current output");
     }
 
     std::vector<pWriterTask> discontinuous_result{RESULT_CACHE_COUNT, nullptr};
 
-    size_t cache_task_count = 0;
+    // 只统计缓存在 discontinuous_result 中的乱序任务，作为积压量和落盘阈值
+    size_t backlog_count = 0, spill_count = 0;
+    auto last_mem_log = std::chrono::steady_clock::now();
     while (expected_id != last_id_back_) {
+        if (std::chrono::steady_clock::now() - last_mem_log >= std::chrono::minutes(5)) {
+            last_mem_log = std::chrono::steady_clock::now();
+            log_writer_mem_stats(backlog_count, spill_count);
+        }
         task = result_queue_->pop(1);
         if (nullptr == task) {
             continue;
         }
-        cache_task_count++;
         task->save_file = false;
         if (task->source_id == expected_id) {
             if (nullptr != task->cache) {
@@ -186,24 +220,33 @@ void Writer::merge_task_thread_call()
             ++expected_id;
         }
         else {
-            if (cache_task_count > BCF_MAX_COUNT && writetmp_) {
-                // Save to file
+            // 积压超过阈值时把结果文本落盘，仅保留元数据，避免个别复杂区域卡住时内存无界增长
+            if (backlog_count >= BCF_MAX_COUNT && writetmp_ && nullptr != task->cache) {
                 std::string tmp_name = std::string(args_->output) + "." + std::to_string(task->source_id);
-                std::ofstream tmp_file(tmp_name);
+                std::ofstream tmp_file(tmp_name, std::ios::binary | std::ios::trunc);
                 if (tmp_file.is_open()) {
                     tmp_file.write(task->cache->s, task->cache->l);
+                    tmp_file.flush();
+                }
+                if (tmp_file.is_open() && tmp_file.good()) {
                     tmp_file.close();
+                    task->save_file = true;
+                    task->word_number = task->cache->l;
+                    push_bcf_cache(task->cache);
+                    task->cache = nullptr;
+                    ++spill_count;
+                    if (spill_count == 1 || spill_count % 512 == 0) {
+                        RovacaLogger::info("Writer spill active: {} result(s) spilled so far (backlog={}).",
+                                           spill_count, backlog_count);
+                    }
                 }
                 else {
-                    RovacaLogger::error("Can't write {} to disk.", tmp_name);
+                    // 落盘失败则保留在内存中，保证结果不丢失
+                    RovacaLogger::error("Can't write {} to disk, keep it in memory.", tmp_name);
                 }
-                task->save_file = true;
-                task->word_number = task->cache->l;
-                cache_task_count--;
-                push_bcf_cache(task->cache);
-                task->cache = nullptr;
             }
             discontinuous_result[task->source_id] = task;
+            ++backlog_count;
         }
 
         while ((task = discontinuous_result[expected_id]) != nullptr) {
@@ -214,33 +257,37 @@ void Writer::merge_task_thread_call()
                 push_bcf_cache(task->cache);
             }
             else if (task->save_file) {
-                ks_resize(&merge_ks, task->word_number + 1);
+                int32_t resize_ret = ks_resize(&merge_ks, task->word_number + 1);
+                CHECK_CONDITION_EXIT(resize_ret != 0, "error: ks_resize");
                 std::string tmp_name = std::string(args_->output) + "." + std::to_string(task->source_id);
-                std::ifstream tmp_file(tmp_name);
-                if (tmp_file.is_open()) {
-                    tmp_file.read(merge_ks.s, task->word_number);
-                    merge_ks.s[task->word_number] = '\0';
-                    merge_ks.l = task->word_number;
-                    task->cache = &merge_ks;
-                    resolve_overrides_and_write_task(task);
-                    tmp_file.close();
-                    std::remove(tmp_name.c_str());
-                }
-                else {
-                    RovacaLogger::error("Can't read {} from disk.", tmp_name);
-                }
+                std::ifstream tmp_file(tmp_name, std::ios::binary);
+                CHECK_CONDITION_EXIT(!tmp_file.is_open(), "Can't read {} from disk.", tmp_name);
+                tmp_file.read(merge_ks.s, task->word_number);
+                CHECK_CONDITION_EXIT(tmp_file.gcount() != std::streamsize(task->word_number), "Truncated read from {}.",
+                                     tmp_name);
+                tmp_file.close();
+                merge_ks.s[task->word_number] = '\0';
+                merge_ks.l = task->word_number;
+                task->cache = &merge_ks;
+                resolve_overrides_and_write_task(task);
+                std::remove(tmp_name.c_str());
                 ks_clear(&merge_ks);
             }
             delete task;
             expected_id++;
-            cache_task_count--;
+            backlog_count--;
         }
     }
 
     ks_free(&del_cache_);
     ks_free(&merge_ks);
 
+    if (spill_count > 0) {
+        RovacaLogger::info("Writer spilled {} out-of-order result(s) to temporary files.", spill_count);
+    }
+
     if (!args_->idx_name.empty()) {
+        if (csi_) set_csi_meta();
         ret = bcf_idx_save(out_.out_file);
         CHECK_CONDITION_EXIT(ret != 0, "failed to build index");
     }
@@ -251,10 +298,45 @@ void Writer::merge_task_thread_call()
 void Writer::close_file()
 {
     if (!args_->idx_name.empty()) {
+        if (csi_) set_csi_meta();
         int ret = bcf_idx_save(out_.out_file);
         CHECK_CONDITION_EXIT(ret != 0, "failed to build index");
     }
     hts_close(out_.out_file);
+}
+
+int32_t Writer::index_tid_for_push(int32_t tid, const char* contig_name)
+{
+    if (csi_) {
+        return tid;
+    }
+    int32_t btid = hts_idx_tbi_name(out_.out_file->idx, tid, contig_name);
+    CHECK_CONDITION_EXIT(btid == -1, "error: hts_idx_tbi_name");
+    return btid;
+}
+
+void Writer::set_csi_meta()
+{
+    // 与 tabix 的 VCF CSI meta 布局一致：28 字节 tbx_conf 前缀 + 以 '\0' 分隔的目标名（header 顺序）
+    uint32_t x[7];
+    const tbx_conf_t conf = tbx_conf_vcf;
+    std::memcpy(x, &conf, 24);
+    size_t l_nm = 0;
+    for (int32_t i = 0; i < bam_hdr_->n_targets; ++i) {
+        l_nm += std::strlen(bam_hdr_->target_name[i]) + 1;
+    }
+    x[6] = static_cast<uint32_t>(l_nm);
+
+    std::vector<uint8_t> meta(28 + l_nm);
+    std::memcpy(meta.data(), x, 28);
+    size_t off = 28;
+    for (int32_t i = 0; i < bam_hdr_->n_targets; ++i) {
+        const size_t len = std::strlen(bam_hdr_->target_name[i]) + 1;
+        std::memcpy(meta.data() + off, bam_hdr_->target_name[i], len);
+        off += len;
+    }
+    int32_t ret = hts_idx_set_meta(out_.out_file->idx, static_cast<uint32_t>(meta.size()), meta.data(), 1);
+    CHECK_CONDITION_EXIT(ret != 0, "error: hts_idx_set_meta");
 }
 
 bool Writer::check_deletion_variant(const std::shared_ptr<char> &ref, kstring_t *s, size_t *current_offset)
@@ -341,8 +423,7 @@ bool Writer::check_deletion_variant(const std::shared_ptr<char> &ref, kstring_t 
                     CHECK_CONDITION_EXIT(size_t(ret) != del_cache_.l, "error: vcf_write_line");
 
                     if (index_) {
-                        int32_t btid = hts_idx_tbi_name(out_.out_file->idx, tid, contig_cache);
-                        CHECK_CONDITION_EXIT(btid == -1, "error: hts_idx_tbi_name");
+                        int32_t btid = index_tid_for_push(tid, contig_cache);
 
                         ret = bgzf_idx_push(out_.out_file->fp.bgzf, out_.out_file->idx, btid, start - 1, stop - 1,
                                             bgzf_tell(out_.out_file->fp.bgzf), 1);
@@ -452,8 +533,7 @@ void Writer::resolve_overrides_and_write_task(pWriterTask task)
                     }
                 }
 
-                btid = hts_idx_tbi_name(out_.out_file->idx, tid, contig_cache);
-                CHECK_CONDITION_EXIT(btid == -1, "error: hts_idx_tbi_name");
+                btid = index_tid_for_push(tid, contig_cache);
 
                 ret = bgzf_idx_push(out_.out_file->fp.bgzf, out_.out_file->idx, btid, start - 1, stop - 1,
                                     bgzf_tell(out_.out_file->fp.bgzf), 1);

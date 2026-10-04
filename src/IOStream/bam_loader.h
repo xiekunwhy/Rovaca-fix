@@ -43,6 +43,9 @@ public:
     // for specified target region.
     void set_target(const char* targets);
 
+    // 为 CRAM 解码设置参考序列（BAM 输入时调用无害）
+    void set_reference_fai(const char* fasta_path);
+
     const std::vector<bam_hdr_t*>& get_sam_hdr();
     void read_recovery(bam1_t*);
 

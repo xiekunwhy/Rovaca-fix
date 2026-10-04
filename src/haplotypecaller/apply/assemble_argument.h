@@ -2,6 +2,7 @@
 #define ASSEMBLE_ARGUMENT_H
 
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 

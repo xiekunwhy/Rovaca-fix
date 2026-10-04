@@ -136,7 +136,7 @@ private:
     int32_t compression_level_;
     std::string dnsnp_file_;
     int32_t dbsnp_prefetch_size_;
-    bool writetmp_;
+    bool writetmp_{true};
 
     static constexpr const int32_t DEFAULT_DBSNP_PREFETCH_SIZE = 10;
     static constexpr const int32_t DEFAULT_MAX_READS_DEPTH = 50;
@@ -206,12 +206,13 @@ RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
         PCR_INDEL_MODEL, po::value<std::string>(&pcr_indel_model_)->default_value("CONSERVATIVE"), "exclusive upper bounds for reference confidence gq bands")(
         EMIT_REF_CONFIDENCE, po::value<std::string>(&reference_confidence_mode_)->default_value("NONE"), "mode for emitting reference confidence scores")(
         IOSTREAM_POOL_SIZE, po::value<int32_t>(&stream_pool_size_)->default_value(DEFAULT_IOSTREAM_POOL_SIZE)->notifier([](const int32_t& value){valid_range(IOSTREAM_POOL_SIZE,value, IOSTREAM_POOL_SIZE_RANGE);}), "mode for emitting reference confidence scores")(
-        CREATE_OUTPUT_INDEX, po::bool_switch(&create_output_index_)->default_value(true)->implicit_value(false), "create an index for output file")(
+        CREATE_OUTPUT_INDEX, po::value<bool>(&create_output_index_)->default_value(true)->implicit_value(true), "create an index for output file (use --index=false to disable)")(
         CREATE_OUTPUT_MD5,po::bool_switch(&create_output_md5_)->default_value(false)->implicit_value(true), "create a md5 for output file")(
         INSPECT_READS,po::bool_switch(&inspect_reads_)->default_value(false)->implicit_value(true), "inspect reads")(
         PAIRHMM_ENGINE,po::bool_switch(&old_pairhmm_engine_)->default_value(false)->implicit_value(true), "old pairhmm engine(intel)")(
         COMPRESSION_LEVEL,po::value<int32_t>(&compression_level_)->default_value(6)->notifier([](int32_t value){valid_range(COMPRESSION_LEVEL, value, COMPRESSION_LEVEL_RANGE);}), "compression level")(
-        DBSNP, po::value<std::string>(&dnsnp_file_), "dbSNP file");
+        DBSNP, po::value<std::string>(&dnsnp_file_), "dbSNP file")(
+        WRITE_TMP, po::value<bool>(&writetmp_)->default_value(true)->implicit_value(true), "spill out-of-order results to temporary files to bound memory usage (default: true, use --write-tmp=false to disable)");
     
     bqsr.add_options()(BQSR_RECAL_TABLE, po::value<std::string>(&recal_table_),"bqsr recal table file.");
     all.add(haplotypecaller).add(bqsr);
@@ -281,12 +282,15 @@ void RovacaToolArgs::usage()
     std::cout << "      --emit-ref-confidence <str>             emit reference confidence score mode (default: NONE)" << std::endl;
     std::cout << "                                              available options: {NONE, GVCF}" << std::endl;
     std::cout << "      --nstreampool <int>                     iostream pool size, must be in [1, 20] (default: 10)" << std::endl;
-    // std::cout << "      --index                                 create index for output file (default: true), ture if specified" << std::endl;
+    std::cout << "      --index                                 create tabix index for .gz output (default: true, use --index=false to disable)" << std::endl;
+    std::cout << "                                              disabling saves several GB of memory on large genomes; run 'tabix -p vcf out.vcf.gz' afterwards" << std::endl;
     std::cout << "      --inspect-reads                         strictly inspect input reads (default: false)" << std::endl;
     std::cout << "      --old-pairhmm-engine                    use intel pairhmm engine (default: rovaca pairhmm engine)" << std::endl;
     std::cout << "      --compression-level                     compression level, must be in [0, 9] (default: 6)" << std::endl;
     // std::cout << "      --md5                                   create MD5 for output file (default: fasle), ture if specified" << std::endl;
     std::cout << "      --dbsnp <file>                          dbSNP file  Default value: null." << std::endl;
+    std::cout << "      --write-tmp                           spill out-of-order results to temporary files to bound memory usage" << std::endl;
+    std::cout << "                                              (default: true, use --write-tmp=false to disable)" << std::endl;
     std::cout << std::endl;
 }
 // clang-format on

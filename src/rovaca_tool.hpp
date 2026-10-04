@@ -244,6 +244,7 @@ bool RovacaTool::initialize_reference()
 {
     reference_path_ = rovaca_args_->reference_path();
     FastaLoader::get_fasta_dict(reference_path_, &fast_dict_);
+    bam_loader_->set_reference_fai(reference_path_.c_str());
     return !(fast_dict_.dict.empty() || fast_dict_.key.empty());
 }
 

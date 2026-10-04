@@ -13,7 +13,7 @@ set(PACK_INCLUDE_DIR .. common ../interface ../IOStream ../common common/base/in
 set(PACK_LINK_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 set(PACK_LINK_LIB genotype pairhmm region utils base assemble writer bqsr)
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC})
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC})
 target_include_directories(${PACK_NAME} PUBLIC ${PACK_INCLUDE_DIR})
 target_link_directories(${PACK_NAME} PUBLIC ${PACK_LINK_DIR})
 target_link_libraries(${PACK_NAME} PUBLIC ${PACK_LINK_LIB})

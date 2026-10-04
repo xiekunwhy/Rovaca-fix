@@ -5,7 +5,7 @@ set(PACK_INCLUDE_DIR ${HTSLIB_INCLUDE_DIR} ../common ../common/assemble ../commo
 set(PACK_LINK_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 set(PACK_LINK_LIB hts utils IOStream logger)
 
-add_library(${PACK_NAME} SHARED ${PACK_SRC})
+add_library(${PACK_NAME} ${ROVACA_LIB_TYPE} ${PACK_SRC})
 target_include_directories(${PACK_NAME} PUBLIC ${PACK_INCLUDE_DIR})
 target_link_directories(${PACK_NAME} PUBLIC ${PACK_LINK_DIR})
 target_link_libraries(${PACK_NAME} PUBLIC ${PACK_LINK_LIB})

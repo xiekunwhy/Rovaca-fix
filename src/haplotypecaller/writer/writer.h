@@ -58,6 +58,7 @@ private:
     htsThreadPool* hts_pool_;
     BlockingQueue<pWriterTask>* result_queue_;
     bool writetmp_;
+    bool csi_{false};
 
     OutputFile out_;
     int32_t last_id_back_;
@@ -110,6 +111,11 @@ private:
     void merge_task_thread_call();
     void resolve_overrides_and_write_task(pWriterTask task);
     bool check_deletion_variant(const std::shared_ptr<char>& ref, kstring_t* s, size_t* current_offset);
+
+    // TBI 用 hts_idx_tbi_name 重映射 tid；CSI 直接使用 header 顺序 tid（保存前统一写 meta）
+    int32_t index_tid_for_push(int32_t tid, const char* contig_name);
+    // 生成与 tabix 布局一致的 VCF CSI meta（bcf_idx_save 前调用）
+    void set_csi_meta();
 
     static bool is_gz_file(const char* filename);
     static std::string generate_gvcf_block_line(int32_t min_gq, int32_t max_gq);

@@ -77,7 +77,7 @@ void HaplotypeCaller::do_work()
     BlockingQueue<BaseSource> *base_source = new BlockingQueue<BaseSource>(n_resource);
     BlockingQueue<std::shared_ptr<RegionResource>> *region_source = new BlockingQueue<std::shared_ptr<RegionResource>>(n_resource);
     BlockingQueue<std::shared_ptr<RegionSource>> *region_queue = new BlockingQueue<std::shared_ptr<RegionSource>>(n_resource);
-    BlockingQueue<pWriterTask> *result_queue = new BlockingQueue<pWriterTask>(2048);
+    BlockingQueue<pWriterTask> *result_queue = new BlockingQueue<pWriterTask>(128);
     BlockingQueue<std::shared_ptr<BamSource>> *m_bam_resource = new BlockingQueue<std::shared_ptr<BamSource>>(n_resource + 20);
 
     std::thread resource_thread([&]() {
