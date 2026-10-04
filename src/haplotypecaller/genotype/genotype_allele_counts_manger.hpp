@@ -10,7 +10,7 @@
 namespace rovaca
 {
 
-static constexpr int32_t s_maximum_ploidy = 2;
+static constexpr int32_t s_maximum_ploidy = 20;
 static constexpr int32_t s_maximum_allele = 50;
 static constexpr int32_t s_genotype_count_overflow = -1;
 static constexpr int32_t s_maximum_strong_ref_genotype_per_ploidy = 1275;

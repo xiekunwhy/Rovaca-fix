@@ -105,7 +105,7 @@ public:
     ActiveMainThreadDispatchTasks(ReadStream *stream, BedLoader *loader, ReferenceManager *m_fasta_loader, contig_info_t *fasta_info,
                                   ActiveRegionBamBlockListSource *block_resource, boost::asio::thread_pool *thread_pool,
                                   BlockingQueue<std::shared_ptr<ActiveBaseResource>> *base_resource, BlockingQueue<BaseSource> *queue,
-                                  BlockingQueue<std::shared_ptr<BamSource>> *bam_queue, BQSRReadTransformer *apply_bqsr)
+                                  BlockingQueue<std::shared_ptr<BamSource>> *bam_queue, BQSRReadTransformer *apply_bqsr, int32_t sample_ploidy = 2)
         : m_stream(stream)
         , m_bed_loader(loader)
         , m_fasta_loader(m_fasta_loader)
@@ -116,6 +116,7 @@ public:
         , m_reduce_queue(queue)
         , m_bam_resource(bam_queue)
         , m_apply_bqsr(apply_bqsr)
+        , m_sample_ploidy(sample_ploidy)
     {
         // m_bam_resource = new BlockingQueue<std::shared_ptr<BamSource>>(32);
         // for (int i = 0; i < 32; i++) {
@@ -182,6 +183,7 @@ private:
     BlockingQueue<BaseSource> *m_reduce_queue;
     BlockingQueue<std::shared_ptr<BamSource>> *m_bam_resource;
     BQSRReadTransformer *m_apply_bqsr;
+    int32_t m_sample_ploidy{2};
     // int iter_current_
     p_bed_intervals current_interval{nullptr};
     int interval_tid{-1};

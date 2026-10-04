@@ -72,8 +72,10 @@ pGenotypeAlleleCounts GenotypeAlleleCounts::next(pMemoryPool pool)
             new_sorted_allele_counts[0] = 0;
             new_sorted_allele_counts[1] = freq0 - 1;
             new_sorted_allele_counts[2] = allele0plus1;
-            new_sorted_allele_counts[3]++;  // = 1 as the array was freshly created with 0s.
-            std::copy(_sorted_allele_counts.begin() + 2, _sorted_allele_counts.end(), std::back_inserter(new_sorted_allele_counts));
+            new_sorted_allele_counts[3] = 1;
+            // 原实现用 back_inserter 追加，导致向量翻倍污染（distinct 爆炸、bad_alloc）；
+            // 应与 increase() 一致，把旧尾部拷贝到新向量的第 4 槽位起
+            std::copy(_sorted_allele_counts.begin() + 2, _sorted_allele_counts.end(), new_sorted_allele_counts.begin() + 4);
         }
     }
 

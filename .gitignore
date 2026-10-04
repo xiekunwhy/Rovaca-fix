@@ -4,3 +4,4 @@ third_lib/static-deps/
 third_lib/boost/
 *.deb
 src/version.h
+build-debug/

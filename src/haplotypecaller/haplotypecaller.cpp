@@ -118,7 +118,7 @@ void HaplotypeCaller::do_work()
     std::thread fasta_process(&ReferenceManager::run, &fasta_manager_inst);
     ActiveMainThreadDispatchTasks main_dispatch_process(streamer, bed_loader_.get(), &fasta_manager_inst, &fasta_manager_inst.get_contig(),
                                                         &block_resource, &run_pool, base_resource, base_source, m_bam_resource,
-                                                        apply_bqsr_);
+                                                        apply_bqsr_, rovaca_args_->ploidy());
     ActiveMainThreadReduce main_reduce_process(&fasta_manager_inst, &fasta_manager_inst.get_contig(), bed_loader_.get(), region_source,
                                                base_resource, &block_resource, base_source, region_queue, force, nullptr);
     std::thread thread_dispatch(&ActiveMainThreadDispatchTasks::run, &main_dispatch_process);
@@ -211,6 +211,7 @@ void HaplotypeCaller::init_args()
     genotype_args->gvcf_gq_bands = hc_args->GQBands_;
     genotype_args->init_reference_confidence_mode(hc_args->referenceConfidenceMode);
     genotype_args->writetmp = rovaca_args_->writetmp();
+    genotype_args->sample_ploidy = rovaca_args_->ploidy();
 
     if (hc_args->referenceConfidenceMode == ReferenceConfidenceMode::GVCF) {
         std::string gvcf_gq_bands;

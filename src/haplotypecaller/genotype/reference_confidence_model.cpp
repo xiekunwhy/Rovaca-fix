@@ -116,7 +116,7 @@ pRefVsAnyResult ReferenceConfidenceModel::calc_genotype_likelihoods_of_ref_vs_an
     int32_t likelihood_count = ploidy + 1;
     double log10ploidy = MathUtils::log10(ploidy);
 
-    pRefVsAnyResult result = new ALLOC_TYPE_IN_POOL(_pool, RefVsAnyResult) RefVsAnyResult{_pool};
+    pRefVsAnyResult result = new ALLOC_TYPE_IN_POOL(_pool, RefVsAnyResult) RefVsAnyResult{likelihood_count, _pool};
 
     uint16_t read_count = 0;
     for (int32_t i = 0; i < FLAG_STATUS; i++) {
@@ -231,10 +231,12 @@ pGenotypeLikelihoods ReferenceConfidenceModel::get_snp_pls(DoubleVector&& d, pMe
 
 DoubleVector ReferenceConfidenceModel::get_genotype_likelihoods_capped_by_hom_ref_likelihood(pRefVsAnyResult result)
 {
+    // hom-ref capped 后的似然个数应与 ploidy+1 一致（原实现写死 TWO_PLOIDY_LIKELIHOOD_CAPACITY=3）
+    const size_t likelihood_count = result->genotype_likelihoods.size();
     DoubleVector ret{_pool};
-    ret.reserve(TWO_PLOIDY_LIKELIHOOD_CAPACITY);
+    ret.reserve(likelihood_count);
     ret.push_back(result->genotype_likelihoods[0]);
-    for (int32_t i = 1; i < TWO_PLOIDY_LIKELIHOOD_CAPACITY; ++i) {
+    for (size_t i = 1; i < likelihood_count; ++i) {
         ret.push_back(std::min(ret.front(), result->genotype_likelihoods[i]));
     }
     return ret;

@@ -315,7 +315,12 @@ bcf1_t* AdapterUtils::variant2bcf(bam_hdr_t* bam_header, bcf_hdr_t* vcf_header, 
     ret = bcf_update_info_int32(vcf_header, rec, k_constan->k_end_key.c_str(), &block_end, 1);
     CHECK_CONDITION_EXIT(ret != 0, "bcf_update_info_int32: {}", k_constan->k_end_key.c_str());
     // .. FORMAT
-    ret = bcf_update_genotypes(vcf_header, rec, k_hom_gt, bcf_hdr_nsamples(vcf_header) * 2);
+    // hom-ref 块的 PL 个数为 ploidy + 1，据此写出 ploidy 个 0/0（bcf_gt_unphased(0)=2）
+    const int32_t ploidy = pls.empty() ? HOM_GT_CUNT : int32_t(pls.size()) - 1;
+    CHECK_CONDITION_EXIT(ploidy < 1 || ploidy > 64, "unexpected ploidy from hom-ref PL size {}", pls.size());
+    int32_t hom_gt[64];
+    for (int32_t i = 0; i < ploidy; ++i) hom_gt[i] = k_hom_gt[0];
+    ret = bcf_update_genotypes(vcf_header, rec, hom_gt, bcf_hdr_nsamples(vcf_header) * ploidy);
     CHECK_CONDITION_EXIT(ret != 0, "bcf_update_genotypes");
 
     ret = bcf_update_format_int32(vcf_header, rec, k_constan->k_depth_key.c_str(), &dp, 1);

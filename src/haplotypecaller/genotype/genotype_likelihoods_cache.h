@@ -12,7 +12,7 @@ namespace rovaca
  */
 class GenotypeLikelihoodsCache
 {
-    static constexpr std::size_t s_buffer_size = 10240;
+    static constexpr std::size_t s_buffer_size = 1024 * 1024;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 private:

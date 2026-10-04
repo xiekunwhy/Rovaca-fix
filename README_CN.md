@@ -66,6 +66,18 @@ TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几�
 - **stack-use-after-return**（ASan 检出）：组装图哈希表把调用者栈上变量的地址存为 key（`hc_assemble_vertex_sequence_spliter.c:212` 等 3 处），函数返回后再次被 `memcmp` 读取，属未定义行为。现在 `assemble_graph_hash_insert*` 会把 key 内容复制到节点自有存储，ASan 复跑干净。
 - **头文件 ODR 违规**：40+ 处头文件中的非 inline 函数定义（`downsampler_hc.h`、`valid_file.h`、`ring_mem_pool.hpp`、`reads_filter_hc.h`、`reads_filter_lib.h`、`rovaca_tool.hpp`、`rovaca_tool_args.h`）已全部补 `inline`，静态链接**不再需要** `-Wl,--allow-multiple-definition` 遮羞布。
 
+### 7. 多倍体支持（`--ploidy N`，1-20）
+
+引擎里本来就埋着任意倍性基因分型的框架（`HomogeneousPloidyModel`、`GenotypeLikelihoodCalculator(ploidy, ...)`），但被作者人为锁住（`ploidy != 2` 直接退出），且多处多倍体代码从未被真实跑过、全是 bug。本轮把整条链路打通，修复的全部是上游 bug：
+
+- `GenotypeAlleleCounts::next()` 把"定位拷贝"错写成"追加"，基因型表在倍性 ≥3 时指数膨胀（启动即 bad_alloc）；
+- `many_component_genotype_likelihood_by_read` 读取空向量而非基因型的等位计数（多等位位点直接 out_of_range）；
+- `MathUtils::approximate_log10sum_log10(values, begin, end)` 在**整个 buffer**（而非 `[begin,end)` 区间）上取最大值——未使用的 0 值槽位让所有 ≥3 等位组分的基因型"最可能"，PL 全部退化为 0、位点被错判为 hom-ref；
+- 输出层的二倍体硬编码：GT 数组（`genotype2bcf`）、GVCF hom-ref 块 GT、`RefVsAnyResult` 似然容量、`TWO_PLOIDY_LIKELIHOOD_CAPACITY`、只按二倍体构建的 `GenotypeLikelihoodsCache`；
+- 活性区域检测的倍性接线（`HcActiveBase`）+ 新增 `--ploidy` 命令行参数（默认 2，与 GATK `--ploidy` 兼容）。
+
+验证：合成四倍体数据（60x，设计等位基因频率 0.25/0.5/0.75/1.0）——GT 判定为 `0/0/0/1`、`0/0/1/1`、`0/1/1/1`、`1/1/1/1`，VCF 与 GVCF 两种模式下 PL 区分度、MLEAC/MLEAF 均正确；二倍体输出在合成与真实数据回归集上与上一版**逐字节一致**。
+
 ## 验证情况
 
 - **结果一致性**：修复版与原版同构建输出 200 万+ 行 GVCF **零差异**；静态版与动态版之间仅有 2 个位点 QUAL 相差 0.001（浮点末位抖动，基因型/PL 完全一致——与 GATK 官方文档中 native vs Java PairHMM 的说明同类）。
@@ -125,7 +137,7 @@ bash build_static.sh        # 依赖自动获取到 third_lib/static-deps（不�
 
 见 [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases)：`rovaca`（x86-64、全静态、strip 后约 6 MB）。
 
-- sha256：`d11e95514957cbfef8ac127899417aa2f9ab2eb78de76b0a381e70d676d9d382`
+- sha256：`61ab51385ff122d51124a22f8528218ef0e6a599edd2b4033898f6874325316a`
 - 要求：x86-64 Linux，内核 ≥ 3.2，CPU 支持 AVX2（推荐 AVX-512）；免 root、无动态库依赖
 - `scp` 到集群 → `chmod +x rovaca` → 直接运行
 

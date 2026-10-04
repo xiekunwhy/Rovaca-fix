@@ -68,6 +68,18 @@ The loader never passed the reference to htslib, so CRAM input could not decode.
 - `assemble_argument.h`: added missing `#include <cstdint>` (fails with GCC 13 + Boost 1.83 headers otherwise).
 - New `ROVACA_STATIC` CMake option + `build_static.sh`: reproducible fully-static single-file binary (see below).
 
+### 7. Polyploid support (`--ploidy N`, 1-20)
+
+GATK-style arbitrary-ploidy genotyping is now enabled end-to-end (it was present in the engine but gated and broken in several places). Fixes that this required, all upstream bugs:
+
+- `GenotypeAlleleCounts::next()` append-vs-positioned-copy corruption that exploded the genotype table for ploidy ≥ 3 (`bad_alloc` at startup);
+- `many_component_genotype_likelihood_by_read` reading an empty vector instead of the genotype's allele counts (threw `out_of_range`);
+- `MathUtils::approximate_log10sum_log10(values, begin, end)` taking the max over the **whole** buffer instead of the range — made every ≥3-component genotype the most likely (degenerate PLs / hom-ref calls);
+- diploid-hardcoded output: `Genotype::genotype2bcf` GT array, GVCF hom-ref block GT, `RefVsAnyResult` likelihood capacity, `TWO_PLOIDY_LIKELIHOOD_CAPACITY`, and the `GenotypeLikelihoodsCache` built for ploidy 2 only;
+- active-region detection ploidy wiring (`HcActiveBase`) and a `--ploidy` CLI option (default 2, GATK-compatible).
+
+Validated on a synthetic tetraploid set (designed allele fractions 0.25/0.5/0.75/1.0 at 60x): GT calls are `0/0/0/1`, `0/0/1/1`, `0/1/1/1`, `1/1/1/1` with correctly differentiated PLs in both VCF and GVCF modes; MLEAC/MLEAF are consistent; diploid output is byte-identical to the previous release on synthetic and real-data regression sets.
+
 ## Verification
 
 - **Output equivalence**: 2M+-line GVCF diff of fixed vs. original build: **0 differences**. Static vs. dynamic builds show only a ±0.001 QUAL last-bit FP jitter at 2 sites (calls, genotypes, PLs identical — same class as GATK's native-vs-Java PairHMM note).
@@ -127,7 +139,7 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `d11e95514957cbfef8ac127899417aa2f9ab2eb78de76b0a381e70d676d9d382`
+- sha256: `61ab51385ff122d51124a22f8528218ef0e6a599edd2b4033898f6874325316a`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 

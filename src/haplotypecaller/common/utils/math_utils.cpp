@@ -249,7 +249,8 @@ double MathUtils::approximate_log10sum_log10(const std::pmr::vector<double>& val
         return NEGATIVE_INFINITY;
     }
 
-    size_t max_ele_index = std::distance(std::begin(values), std::max_element(values.begin(), values.end()));
+    // 原实现在整个 vector 上找最大值（包括 [begin,end) 之外的初始化 0 值），必须限定在区间内
+    size_t max_ele_index = std::distance(std::begin(values), std::max_element(values.begin() + (long)begin, values.begin() + (long)end));
     double val, diff, approx_sum = values.at(max_ele_index);
     for (size_t i = begin; i < end; ++i) {
         val = values.at(i);
@@ -264,7 +265,7 @@ double MathUtils::approximate_log10sum_log10(const std::pmr::vector<double>& val
 
 double MathUtils::approximate_log10sum_log10(const std::pmr::vector<double>& values, size_t end)
 {
-    size_t max_ele_index = std::distance(std::begin(values), std::max_element(values.begin(), values.end()));
+    size_t max_ele_index = std::distance(std::begin(values), std::max_element(values.begin(), values.begin() + (long)end));
     double val, diff, approx_sum = values.at(max_ele_index);
     for (size_t i = 0; i < end; ++i) {
         val = values.at(i);

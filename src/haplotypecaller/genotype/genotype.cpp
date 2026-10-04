@@ -114,17 +114,23 @@ void Genotype::genotype2bcf(bcf_hdr_t* vcf_header, bcf1_t* rec, const std::pmr::
     int32_t ret;
     // "GT:AD:DP:GQ:PGT:PID:PL:PS:SB"
     if (saw_good_gt) {
-        int32_t gt[HOM_GT_CUNT];
-        if (ROVACA_UNLIKELY(_alleles.at(0) == _alleles.at(1) && _alleles.at(0) == StaticAllele::get_instance()->_no_call.get())) {
-            gt[0] = gt[1] = _phased ? 1 : 0;
+        const size_t ploidy = _alleles.size();
+        CHECK_CONDITION_EXIT(ploidy == 0 || ploidy > 64, "unexpected genotype allele count {}", ploidy);
+        int32_t gt[64];
+        bool all_no_call = ploidy > 0;
+        for (size_t i = 0; i < ploidy; ++i) {
+            all_no_call &= (_alleles.at(i) == StaticAllele::get_instance()->_no_call.get());
         }
-        else {
-            int32_t idx0 = mm.at(_alleles.at(0));
-            int32_t idx1 = mm.at(_alleles.at(1));
-            gt[0] = _phased ? bcf_gt_phased(idx0) : bcf_gt_unphased(idx0);
-            gt[1] = _phased ? bcf_gt_phased(idx1) : bcf_gt_unphased(idx1);
+        for (size_t i = 0; i < ploidy; ++i) {
+            if (all_no_call) {
+                gt[i] = _phased ? 1 : 0;
+            }
+            else {
+                int32_t idx = mm.at(_alleles.at(i));
+                gt[i] = _phased ? bcf_gt_phased(idx) : bcf_gt_unphased(idx);
+            }
         }
-        ret = bcf_update_genotypes(vcf_header, rec, gt, bcf_hdr_nsamples(vcf_header) * 2);
+        ret = bcf_update_genotypes(vcf_header, rec, gt, int32_t(bcf_hdr_nsamples(vcf_header) * ploidy));
         CHECK_CONDITION_EXIT(ret != 0, "bcf_update_genotypes");
     }
     if (saw_ad) {

@@ -108,6 +108,7 @@ public:
     const std::string& dbsnp_path() const { return dnsnp_file_; }
     int32_t dbsnp_prefetch_size() const { return dbsnp_prefetch_size_; }
     bool writetmp() const { return writetmp_; }
+    int32_t ploidy() const { return ploidy_; }
 
 private:
     po::variables_map vm_;
@@ -137,6 +138,7 @@ private:
     std::string dnsnp_file_;
     int32_t dbsnp_prefetch_size_;
     bool writetmp_{true};
+    int32_t ploidy_;
 
     static constexpr const int32_t DEFAULT_DBSNP_PREFETCH_SIZE = 10;
     static constexpr const int32_t DEFAULT_MAX_READS_DEPTH = 50;
@@ -150,6 +152,7 @@ private:
     static constexpr const argument_range BASE_QUALITY_SCORE_THRESHOLD_RANGE = {6, 127};
     static constexpr const argument_range IOSTREAM_POOL_SIZE_RANGE = {1, 20};
     static constexpr const argument_range COMPRESSION_LEVEL_RANGE = {0, 9};
+    static constexpr const argument_range PLOIDY_RANGE = {1, 20};
 
     static constexpr const char* INPUT_PATH_NAME = "input,I";
     static constexpr const char* OUTUT_PATH_NAME = "output,O";
@@ -179,6 +182,7 @@ private:
     static constexpr const char* DBSNP = "dbsnp";
     static constexpr const char* DBSNP_PREFETCH_SIZE = "dbsnp-prefetch-size";
     static constexpr const char* WRITE_TMP = "write-tmp";
+    static constexpr const char* PLOIDY = "ploidy";
 };
 
 // clang-format off
@@ -212,7 +216,8 @@ inline RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
         PAIRHMM_ENGINE,po::bool_switch(&old_pairhmm_engine_)->default_value(false)->implicit_value(true), "old pairhmm engine(intel)")(
         COMPRESSION_LEVEL,po::value<int32_t>(&compression_level_)->default_value(6)->notifier([](int32_t value){valid_range(COMPRESSION_LEVEL, value, COMPRESSION_LEVEL_RANGE);}), "compression level")(
         DBSNP, po::value<std::string>(&dnsnp_file_), "dbSNP file")(
-        WRITE_TMP, po::value<bool>(&writetmp_)->default_value(true)->implicit_value(true), "spill out-of-order results to temporary files to bound memory usage (default: true, use --write-tmp=false to disable)");
+        WRITE_TMP, po::value<bool>(&writetmp_)->default_value(true)->implicit_value(true), "spill out-of-order results to temporary files to bound memory usage (default: true, use --write-tmp=false to disable)")(
+        PLOIDY, po::value<int32_t>(&ploidy_)->default_value(2)->notifier([](const int32_t& value){valid_range(PLOIDY, value, PLOIDY_RANGE);}), "sample ploidy, must be in [1, 20] (default: 2)");
     
     bqsr.add_options()(BQSR_RECAL_TABLE, po::value<std::string>(&recal_table_),"bqsr recal table file.");
     all.add(haplotypecaller).add(bqsr);
@@ -279,6 +284,7 @@ inline void RovacaToolArgs::usage()
     std::cout << "      --nthreads <int>                        number of threads to use, must be in [1, 128] (default: 30)" << std::endl;
     std::cout << "      --pcr-indel-model <str>                 PCR indel model (default: CONSERVATIVE)" << std::endl;
     std::cout << "                                              available options: {NONE, HOSTILE, CONSERVATIVE, AGGRESSIVE}" << std::endl;
+    std::cout << "      --ploidy <int>                          sample ploidy, must be in [1, 20] (default: 2)" << std::endl;
     std::cout << "      --emit-ref-confidence <str>             emit reference confidence score mode (default: NONE)" << std::endl;
     std::cout << "                                              available options: {NONE, GVCF}" << std::endl;
     std::cout << "      --nstreampool <int>                     iostream pool size, must be in [1, 20] (default: 10)" << std::endl;

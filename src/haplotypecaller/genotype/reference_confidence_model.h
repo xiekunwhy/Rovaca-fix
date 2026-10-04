@@ -15,10 +15,10 @@ typedef struct RefVsAnyResult
     DoubleVector genotype_likelihoods;
     Int32Vector final_phred_scaled_genotype_likelihoods;
 
-    explicit RefVsAnyResult(pMemoryPool pool)
+    explicit RefVsAnyResult(int32_t likelihood_count, pMemoryPool pool)
         : ref_depth(0)
         , non_ref_depth(0)
-        , genotype_likelihoods(TWO_PLOIDY_LIKELIHOOD_CAPACITY, pool)
+        , genotype_likelihoods(likelihood_count, pool)
         , final_phred_scaled_genotype_likelihoods(pool)
     {}
 } RefVsAnyResult, *pRefVsAnyResult;

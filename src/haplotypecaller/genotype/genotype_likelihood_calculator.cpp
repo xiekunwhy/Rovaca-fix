@@ -14,7 +14,7 @@ pGenotypeAlleleCountsManger GenotypeLikelihoodCalculator::s_manger = GenotypeAll
 
 pGenotypeLikelihoodCalculator GenotypeLikelihoodCalculator::create(int32_t ploidy, int32_t allele_count, pMemoryPool pool)
 {
-    CHECK_CONDITION_EXIT(ploidy != 2 || allele_count >= s_maximum_allele,
+    CHECK_CONDITION_EXIT(ploidy < 1 || ploidy > s_maximum_ploidy || allele_count >= s_maximum_allele,
                          "the number of genotypes is too large for ploidy {} and allele {}", ploidy, allele_count);
 
     int32_t genotype_count = s_manger->allele_first_genotype_offset_by_ploidy(ploidy).at(allele_count);
@@ -118,14 +118,14 @@ void GenotypeLikelihoodCalculator::many_component_genotype_likelihood_by_read(pG
                                                                               int32_t read_count, DoubleVector& result,
                                                                               DoubleVector& buffer) const
 {
-    Int32Vector genotype_alleles_and_counts(_maximum_distinct_alleles_in_genotype, buffer.get_allocator());
-    int32_t component_count = gac->distinct_allele_count();
-    int32_t allele_data_size = (_ploidy + 1) * read_count;
+    // 原实现读取了一个新建的空向量（应为 gac 的 sorted allele counts），导致等位信息全 0 且下标越界
+    const int32_t component_count = gac->distinct_allele_count();
+    const int32_t allele_data_size = (_ploidy + 1) * read_count;
 
     int32_t allele_index, allele_count, allele_data_offset;
-    for (int32_t c = 0, cc = 0; c < component_count; c++) {
-        allele_index = genotype_alleles_and_counts.at(cc++);
-        allele_count = genotype_alleles_and_counts.at(cc++);
+    for (int32_t c = 0; c < component_count; c++) {
+        allele_index = gac->allele_index_at(c);
+        allele_count = gac->allele_count_at(c);
         // allele_data_offset will point to the index of the first read likelihood for that allele and allele count.
         allele_data_offset = allele_data_size * allele_index + allele_count * read_count;
         for (int32_t r = 0, read_data_offset = c; r < read_count; r++, read_data_offset += _maximum_distinct_alleles_in_genotype) {

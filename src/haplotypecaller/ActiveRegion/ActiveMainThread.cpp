@@ -46,7 +46,7 @@ void ActiveMainThreadDispatchTasks::run()
         boost::asio::post(*m_run_pool, [=] {
             pthread_setname_np(pthread_self(), "ActiveRegionBase");
             resource->new_mempool();
-            ActiveBase *base = new HcActiveBase(resource->pool, 2, current_tid, start, end, actual_start, actual_end,
+            ActiveBase *base = new HcActiveBase(resource->pool, m_sample_ploidy, current_tid, start, end, actual_start, actual_end,
                                                 m_bed_loader ? resource->target : nullptr, work_id, ref_base.get(), ref_len);
 
             for (auto reads : cover_reads) {
