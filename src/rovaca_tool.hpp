@@ -46,7 +46,7 @@ public:
     std::unique_ptr<BamLoader> bam_loader_;
     std::unique_ptr<BedLoader> bed_loader_;
     UniqueStream streamer_;
-    std::unique_ptr<ReadFilter> filter_;
+    std::unique_ptr<HCReadFilter> filter_;
     std::unique_ptr<Transformer> transformer_;
     std::unique_ptr<Downsampler> downsampler_;
     std::map<std::string, p_bed_intervals> bed_intervals_;

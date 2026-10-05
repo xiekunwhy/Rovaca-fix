@@ -182,6 +182,7 @@ const UniqueStream &HaplotypeCaller::custom_streamer()
     // return a customted reads stream.
     if (apply_filter_) {
         filter_ = std::make_unique<HCReadFilter>(merged_header_, rovaca_args_->inspect_reads());
+        filter_->set_min_mapping_quality(rovaca_args_->minimum_mapping_quality());
         streamer_.reset(new ReadsFilterIterator(streamer_.release(), filter_.get()));
     }
     // 先降采样再重校准质量.

@@ -137,7 +137,7 @@ bash build_static.sh        # 依赖自动获取到 third_lib/static-deps（不�
 
 见 [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases)：`rovaca`（x86-64、全静态、strip 后约 6 MB）。
 
-- sha256：`61ab51385ff122d51124a22f8528218ef0e6a599edd2b4033898f6874325316a`
+- sha256：`08d1b1f5b31334d67c52a43b57a85a714cda35656741a80b8482c08d761e46bc`
 - 要求：x86-64 Linux，内核 ≥ 3.2，CPU 支持 AVX2（推荐 AVX-512）；免 root、无动态库依赖
 - `scp` 到集群 → `chmod +x rovaca` → 直接运行
 

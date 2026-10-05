@@ -31,6 +31,9 @@ public:
     ~HCReadFilter() { RovacaLogger::info("ReadsFilter done, {} reads were filtered", filterd_reads_count); }
     bool test(bam1_t* read) override;
 
+    // 对应 GATK --minimum-mapping-quality（默认 20）
+    void set_min_mapping_quality(int32_t q) { min_mqual = q; }
+
 private:
     bool read_mapq_check(bam1_t* read);
 

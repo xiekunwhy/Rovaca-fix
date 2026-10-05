@@ -139,7 +139,7 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `61ab51385ff122d51124a22f8528218ef0e6a599edd2b4033898f6874325316a`
+- sha256: `08d1b1f5b31334d67c52a43b57a85a714cda35656741a80b8482c08d761e46bc`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 
