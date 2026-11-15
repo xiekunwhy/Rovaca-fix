@@ -39,8 +39,12 @@ BamLoader::BamLoader(const std::vector<const char*>& bam_list, const htsThreadPo
         }
         bam_paths[i] = bam_list[i];
     }
-    hts_set_opt(bam_fp[0], HTS_OPT_THREAD_POOL, thread_pool);
-    hts_set_opt(bam_fp[0], HTS_OPT_CACHE_SIZE, BAM_HTS_CACHE_SIZE);
+    for (int i = 0; i < nfiles; i++) {
+        if (thread_pool && thread_pool->pool) {
+            hts_set_opt(bam_fp[i], HTS_OPT_THREAD_POOL, thread_pool);
+        }
+        hts_set_opt(bam_fp[i], HTS_OPT_CACHE_SIZE, BAM_HTS_CACHE_SIZE);
+    }
 }
 
 BamLoader::BamLoader(const std::vector<const char*>& bam_list, bool force_bed)

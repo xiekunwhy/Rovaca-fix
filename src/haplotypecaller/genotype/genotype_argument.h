@@ -50,6 +50,7 @@ public:  // 需要初始化的参数
     std::vector<int32_t> gvcf_gq_bands;
     ReferenceConfidenceMode reference_confidence_mode{ReferenceConfidenceMode::NONE};
     bool writetmp{false};
+    std::string sample_name{};
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 public:                                      // 依赖参数，依赖其他参数

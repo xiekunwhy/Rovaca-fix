@@ -82,7 +82,18 @@ Validated on a synthetic tetraploid set (designed allele fractions 0.25/0.5/0.75
 
 ### 8. Missing `@RG` / `SM` crash fix (fix.6)
 
-Creating the VCF header used `strstr(strstr(bam_hdr->text, "@RG"), "SM")` and dereferenced the result without checking it. A BAM without read groups, or with read groups lacking `SM`, therefore segfaulted immediately after the output-index startup message. Sample handling now uses htslib tag lookups and the same fallback on both the engine and Writer paths: `SM` → `ID` → `sample`. Verified for both missing-`RG` and missing-`SM` inputs in VCF/GVCF modes, including 40 threads and ASan; normal `@RG/SM` VCF records remain unchanged.
+Creating the VCF header used `strstr(strstr(bam_hdr->text, "@RG"), "SM")` and dereferenced the result without checking it. A BAM without read groups, or with read groups lacking `SM`, therefore segfaulted immediately after the output-index startup message. Sample handling now uses htslib tag lookups instead of unchecked string searches. Verified for both missing-`RG` and missing-`SM` inputs in VCF/GVCF modes, including 40 threads and ASan; normal `@RG/SM` VCF records remain unchanged. Fix.7 additionally supports `--sample-name` and uses the input filename as the final fallback instead of a generic `sample`.
+
+### 9. Integrated robustness improvements (fix.7)
+
+- Replaced the Writer's fixed 128 MB out-of-order array with a sparse map, eliminating both the upfront allocation and out-of-bounds access when `source_id` exceeds the old array size. Duplicate source IDs are rejected explicitly.
+- Empty GVCF regions now emit the requested ploidy in GT and PL instead of hard-coded diploid values.
+- Added `--sample-name`, `--heterozygosity`, and `--indel-heterozygosity`; defaults remain GATK-compatible (`0.001` and `0.000125`). Sample resolution is `SM` → `ID` → input filename unless overridden.
+- `--inspect-reads` no longer rejects every read when the BAM has no read-group declarations.
+- Genotype-offset arithmetic now uses `int64_t` with sticky overflow markers, and calculator entry points reject overflow before allocation. The likelihood-count cache covers ploidy 1-20 directly.
+- Read-group parsing and per-file HTS thread-pool/cache setup were hardened without changing the calling algorithm.
+
+The proposed `max-genotype-count` allele-pruning rewrite was **not** integrated: it changes calls and does not yet preserve all GVCF alleles and annotations. No allele-pruning behavior was changed in fix.7.
 
 ## Verification
 
@@ -90,6 +101,7 @@ Creating the VCF header used `strstr(strstr(bam_hdr->text, "@RG"), "SM")` and de
 - **Regression suite** (synthetic diploid set, 48 designed SNPs/indels, 12 contigs): VCF/GVCF modes, CRAM input, TBI default, `--index=false`, help text — 9/9 pass.
 - **Spill stress test** (threshold forced to 0): 250 results spilled → read back → output byte-identical, temp files cleaned.
 - **Speed**: identical runtime on real-data chr12 (Rovaca's ~60x-vs-GATK performance is untouched).
+- **Fix.7 integration**: normal diploid VCF body unchanged from fix.6; missing-RG/ID and sample-name override checks passed; RG-less `--inspect-reads` filtered zero reads; tetraploid empty blocks have four GT alleles and five PL values; a 199-task out-of-order Writer stress spilled 71 tasks and returned all 200 records in order with no temporary files left. Matched four-thread tests reduced peak RSS from 1,834,716 KB to 1,703,988 KB (about 127.7 MiB).
 
 ## Usage
 
@@ -143,7 +155,7 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `f52ef0601891ffe957021a605d5ff9c770fd7c225e07fb59fd6c0f8c9d92bb09`
+- sha256: `d66fde6b1c144e2e19db15f62cf636cfd94fd8a822c82c8e655a1cfe28eb577e`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 

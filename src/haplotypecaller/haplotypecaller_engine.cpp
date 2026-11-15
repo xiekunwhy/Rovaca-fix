@@ -81,7 +81,7 @@ HaplotypeCallerEngine::~HaplotypeCallerEngine()
 }
 
 // todo: 下个版本优化空read的区间直接出结果
-static pVariant emptyVariant(pSimpleInterval original, uint8_t ref, pMemoryPool pool)
+static pVariant emptyVariant(pSimpleInterval original, uint8_t ref, int32_t ploidy, pMemoryPool pool)
 {
     pVariant vc = Variant::create(pool);
     vc->set_tid(original->get_tid());
@@ -93,10 +93,10 @@ static pVariant emptyVariant(pSimpleInterval original, uint8_t ref, pMemoryPool 
     vc->set_alleles(vc_alleles);
 
     pGenotype g = Genotype::create(pool);
-    g->set_alleles({{ref_a, ref_a}, pool});
+    g->set_alleles(AlleleVector(size_t(ploidy), ref_a, pool));
     g->set_dp(0);
     g->set_gq(0);
-    g->set_pl({{0, 0, 0}, pool});
+    g->set_pl(Int32Vector(size_t(ploidy + 1), 0, pool));
     pGenotypesContext gc = GenotypesContext::create(pool);
     gc->add(g);
     vc->set_genotype(gc);
@@ -164,7 +164,7 @@ void HaplotypeCallerEngine::call_region()
                 // todo: 下个版本优化空read的区间直接出结果
                 if (emit_reference_confidence && result.padding_reads.empty()) {
                     uint8_t ref_byte = source->ref_.get()[original->get_start() - 1];
-                    pVariant vc = emptyVariant(original, ref_byte, &target_mem);
+                    pVariant vc = emptyVariant(original, ref_byte, gargs->sample_ploidy, &target_mem);
                     block_combiner->submit(vc, bcf_cache);
                     CLEAR_ERSOURCE();
                     continue;

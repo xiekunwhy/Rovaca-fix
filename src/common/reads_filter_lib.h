@@ -32,7 +32,8 @@ static int cigar_consumes_reference(uint32_t cigar) { return bam_cigar_type(ciga
  */
 inline bool ReadFilterLib::is_well_formed(bam1_t* read, bam_hdr_t* header)
 {
-    return valid_alignment_start(read) && valid_alignment_end(read) && has_read_group(read) && read_len_equal_cigar_len(read) &&
+    const bool rg_ok = (header == nullptr || sam_hdr_count_lines(header, "RG") <= 0) ? true : has_read_group(read);
+    return valid_alignment_start(read) && valid_alignment_end(read) && rg_ok && read_len_equal_cigar_len(read) &&
            matching_base_and_qual(read) && seq_is_stored(read) && alignment_agree_with_hdr(read, header);
 }
 

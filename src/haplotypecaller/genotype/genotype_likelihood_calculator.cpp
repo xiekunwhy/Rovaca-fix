@@ -14,18 +14,24 @@ pGenotypeAlleleCountsManger GenotypeLikelihoodCalculator::s_manger = GenotypeAll
 
 pGenotypeLikelihoodCalculator GenotypeLikelihoodCalculator::create(int32_t ploidy, int32_t allele_count, pMemoryPool pool)
 {
-    CHECK_CONDITION_EXIT(ploidy < 1 || ploidy > s_maximum_ploidy || allele_count >= s_maximum_allele,
+    CHECK_CONDITION_EXIT(ploidy < 1 || ploidy > s_maximum_ploidy || allele_count < 1 || allele_count >= s_maximum_allele,
                          "the number of genotypes is too large for ploidy {} and allele {}", ploidy, allele_count);
 
     int32_t genotype_count = s_manger->allele_first_genotype_offset_by_ploidy(ploidy).at(allele_count);
+    CHECK_CONDITION_EXIT(genotype_count == s_genotype_count_overflow || genotype_count <= 0,
+                         "genotype count overflow for ploidy {} and allele_count {}", ploidy, allele_count);
     return new ALLOC_TYPE_IN_POOL(pool, GenotypeLikelihoodCalculator)
         GenotypeLikelihoodCalculator{ploidy, allele_count, genotype_count, pool};
 }
 
 int32_t GenotypeLikelihoodCalculator::genotype_count(int32_t ploidy, int32_t allele_count)
 {
-    CHECK_CONDITION_EXIT(allele_count >= (s_maximum_ploidy + 1), "the number of genotypes is too large");
-    return s_manger->allele_first_genotype_offset_by_ploidy(ploidy).at(allele_count);
+    CHECK_CONDITION_EXIT(ploidy < 1 || ploidy > s_maximum_ploidy || allele_count < 1 || allele_count >= s_maximum_allele,
+                         "the number of genotypes is too large for ploidy {} and allele {}", ploidy, allele_count);
+    int32_t genotype_count = s_manger->allele_first_genotype_offset_by_ploidy(ploidy).at(allele_count);
+    CHECK_CONDITION_EXIT(genotype_count == s_genotype_count_overflow || genotype_count <= 0,
+                         "genotype count overflow for ploidy {} and allele_count {}", ploidy, allele_count);
+    return genotype_count;
 }
 
 pGenotypeAlleleCounts GenotypeLikelihoodCalculator::genotype_allele_counts_at(int32_t index)

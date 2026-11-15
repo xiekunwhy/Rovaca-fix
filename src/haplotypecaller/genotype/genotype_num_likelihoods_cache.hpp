@@ -14,7 +14,7 @@ typedef class GenotypeNumLikelihoodsCache GenotypeNumLikelihoodsCache, *pGenotyp
 
 class GenotypeNumLikelihoodsCache
 {
-    static constexpr int32_t s_default_ploidy = 3;
+    static constexpr int32_t s_default_ploidy = 21;
     static constexpr int32_t s_default_n_alleles = 8;
 
     /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */

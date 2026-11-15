@@ -30,7 +30,6 @@ namespace rovaca
 #define BCF_CACHE_SIZE      (128 * 1024)
 #define BCF_MAX_COUNT       (128)
 #define ROVACA_HTS_CACHE_SIZE (64 * 1024 * 1024)
-#define RESULT_CACHE_COUNT  (128 * 1024 * 1024 / 8)
 
 static inline bool is_non_variant(kstring_t *s)
 {
@@ -193,7 +192,8 @@ void Writer::merge_task_thread_call()
         CHECK_CONDITION_EXIT(ret != 0, "failed to initialise index for current output");
     }
 
-    std::vector<pWriterTask> discontinuous_result{RESULT_CACHE_COUNT, nullptr};
+    std::unordered_map<int32_t, pWriterTask> discontinuous_result;
+    discontinuous_result.reserve(256);
 
     // 只统计缓存在 discontinuous_result 中的乱序任务，作为积压量和落盘阈值
     size_t backlog_count = 0, spill_count = 0;
@@ -244,11 +244,15 @@ void Writer::merge_task_thread_call()
                     RovacaLogger::error("Can't write {} to disk, keep it in memory.", tmp_name);
                 }
             }
-            discontinuous_result[task->source_id] = task;
+            auto inserted = discontinuous_result.emplace(task->source_id, task);
+            CHECK_CONDITION_EXIT(!inserted.second, "duplicate writer source_id {}", task->source_id);
             ++backlog_count;
         }
 
-        while ((task = discontinuous_result[expected_id]) != nullptr) {
+        auto next = discontinuous_result.find(expected_id);
+        while (next != discontinuous_result.end()) {
+            task = next->second;
+            discontinuous_result.erase(next);
             if (nullptr != task->cache) {
                 if (task->cache->l > 0) {
                     resolve_overrides_and_write_task(task);
@@ -275,6 +279,7 @@ void Writer::merge_task_thread_call()
             delete task;
             expected_id++;
             backlog_count--;
+            next = discontinuous_result.find(expected_id);
         }
     }
 
@@ -616,7 +621,7 @@ bcf_hdr_t *Writer::init_vcf_header(pHCArgs args, bam_hdr_t *bam_hdr)
     CHECK_CONDITION_EXIT(ret != 0, "bcf_hdr_append: INFO=SOR");
     // clang-format on
 
-    generate_samples(hdr, bam_hdr);
+    generate_samples(hdr, bam_hdr, args->sample_name);
     generate_contig(hdr, bam_hdr);
 
     ret = bcf_hdr_append(hdr, "##source=HaplotypeCaller");
@@ -693,7 +698,7 @@ bcf_hdr_t *Writer::init_gvcf_header(pHCArgs args, bam_hdr_t *bam_hdr)
     CHECK_CONDITION_EXIT(ret != 0, "bcf_hdr_append: INFO=ReadPosRankSum");
     // clang-format on
 
-    generate_samples(hdr, bam_hdr);
+    generate_samples(hdr, bam_hdr, args->sample_name);
     generate_contig(hdr, bam_hdr);
 
     ret = bcf_hdr_append(hdr, "##source=HaplotypeCaller");
@@ -730,18 +735,19 @@ void Writer::generate_contig(bcf_hdr_t *hdr, bam_hdr_t *bam_hdr)
     }
 }
 
-void Writer::generate_samples(bcf_hdr_t *hdr, bam_hdr_t *bam_hdr)
+void Writer::generate_samples(bcf_hdr_t *hdr, bam_hdr_t *bam_hdr, const std::string& sample_name)
 {
-    std::string sample_name{"sample"};
+    std::string resolved_name = sample_name;
     kstring_t value{0, 0, nullptr};
-    if (sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "SM", &value) == 0 && value.l > 0) {
-        sample_name.assign(value.s, value.l);
+    if (resolved_name.empty() && sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "SM", &value) == 0 && value.l > 0) {
+        resolved_name.assign(value.s, value.l);
     }
-    else if (sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "ID", &value) == 0 && value.l > 0) {
-        sample_name.assign(value.s, value.l);
+    else if (resolved_name.empty() && sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "ID", &value) == 0 && value.l > 0) {
+        resolved_name.assign(value.s, value.l);
     }
+    if (resolved_name.empty()) resolved_name = "sample";
     ks_free(&value);
-    int32_t ret = bcf_hdr_add_sample(hdr, sample_name.c_str());
+    int32_t ret = bcf_hdr_add_sample(hdr, resolved_name.c_str());
     CHECK_CONDITION_EXIT(ret != 0, "bcf_hdr_add_sample");
 }
 

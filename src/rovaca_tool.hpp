@@ -1,6 +1,8 @@
 #ifndef ROVACA_PLUGIN_H
 #define ROVACA_PLUGIN_H
 
+#include <algorithm>
+#include <cstring>
 #include <functional>
 #include <memory>
 #include <sstream>
@@ -175,36 +177,49 @@ inline bool RovacaTool::initialize_bam()
         bam_contigs_.push_back({chr_name, chr_len});
     }
 
-    // Extract all RG info from bamhdr.
-    const char *p_rg = strstr(hdr->text, "@RG");
-    while (p_rg) {
+    kstring_t rg_value{0, 0, nullptr};
+    const int rg_count = sam_hdr_count_lines(hdr, "RG");
+    for (int i = 0; i < rg_count; ++i) {
         RGHashMap read_group;
-        std::string line = std::string(p_rg, strstr(p_rg + 3, "\n") - p_rg);
-        std::istringstream iss(line);
-        std::string token;
-        while (iss >> token) {
-            size_t pos = token.find(':');
-            if (pos != std::string::npos) {
-                std::string key = token.substr(0, pos);
-                std::string value = token.substr(pos + 1);
-                read_group.insert({key, value});
+        std::string id;
+        if (sam_hdr_find_tag_pos(hdr, "RG", i, "ID", &rg_value) == 0 && rg_value.l > 0) {
+            id.assign(rg_value.s, rg_value.l);
+            read_group["ID"] = id;
+            if (std::find(read_group_id_.begin(), read_group_id_.end(), id) == read_group_id_.end()) {
+                read_group_id_.push_back(id);
             }
         }
-        read_group_map_.emplace_back(read_group);
-        p_rg = strstr(p_rg + 1, "@RG");
+        if (sam_hdr_find_tag_pos(hdr, "RG", i, "SM", &rg_value) == 0 && rg_value.l > 0) {
+            std::string sample(rg_value.s, rg_value.l);
+            read_group["SM"] = sample;
+            if (std::find(samplelist_.begin(), samplelist_.end(), sample) == samplelist_.end()) {
+                samplelist_.push_back(std::move(sample));
+            }
+        }
+        else if (!id.empty() && std::find(samplelist_.begin(), samplelist_.end(), id) == samplelist_.end()) {
+            samplelist_.push_back(id);
+        }
+        read_group_map_.emplace_back(std::move(read_group));
     }
+    ks_free(&rg_value);
 
-    // Get sample list.
-    for (auto &it : read_group_map_) {
-        if (it.count("SM") && !it["SM"].empty())
-            samplelist_.emplace_back(it["SM"]);
-        else if (it.count("ID") && !it["ID"].empty())
-            samplelist_.emplace_back(it["ID"]);
-        if (it.count("ID")) read_group_id_.emplace_back(it["ID"]);
+    if (!rovaca_args_->sample_name().empty()) {
+        samplelist_.assign(1, rovaca_args_->sample_name());
     }
-    if (samplelist_.empty()) {
-        samplelist_.emplace_back("sample");
-        RovacaLogger::warn("no SM tag found in BAM header; using sample name 'sample'");
+    else if (samplelist_.empty()) {
+        std::string fallback = read_path_;
+        const size_t slash = fallback.find_last_of("/\\");
+        if (slash != std::string::npos) fallback = fallback.substr(slash + 1);
+        for (const char* extension : {".cram", ".bam", ".sam"}) {
+            const size_t length = std::strlen(extension);
+            if (fallback.size() > length && fallback.compare(fallback.size() - length, length, extension) == 0) {
+                fallback.resize(fallback.size() - length);
+                break;
+            }
+        }
+        if (fallback.empty()) fallback = "sample";
+        samplelist_.push_back(fallback);
+        RovacaLogger::warn("no SM tag found in BAM header; using sample name '{}'", fallback);
     }
     return !(bam_loader_ == nullptr || merged_header_ == nullptr);
 }

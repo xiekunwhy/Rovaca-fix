@@ -6,6 +6,7 @@
 #include <memory>
 #include <memory_resource>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -122,7 +123,7 @@ private:
 
     static void generate_gvcf_block(bcf_hdr_t* hdr, pHCArgs args);
     static void generate_contig(bcf_hdr_t* hdr, bam_hdr_t* bam_hdr);
-    static void generate_samples(bcf_hdr_t* hdr, bam_hdr_t* bam_hdr);
+    static void generate_samples(bcf_hdr_t* hdr, bam_hdr_t* bam_hdr, const std::string& sample_name);
 };
 
 }  // namespace rovaca

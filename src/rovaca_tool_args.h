@@ -110,6 +110,9 @@ public:
     bool writetmp() const { return writetmp_; }
     int32_t ploidy() const { return ploidy_; }
     int32_t minimum_mapping_quality() const { return min_mapping_quality_; }
+    const std::string& sample_name() const { return sample_name_; }
+    double heterozygosity() const { return snp_heterozygosity_; }
+    double indel_heterozygosity() const { return indel_heterozygosity_; }
 
 private:
     po::variables_map vm_;
@@ -141,6 +144,9 @@ private:
     bool writetmp_{true};
     int32_t ploidy_;
     int32_t min_mapping_quality_;
+    std::string sample_name_{};
+    double snp_heterozygosity_{0.001};
+    double indel_heterozygosity_{0.000125};
 
     static constexpr const int32_t DEFAULT_DBSNP_PREFETCH_SIZE = 10;
     static constexpr const int32_t DEFAULT_MAX_READS_DEPTH = 50;
@@ -187,6 +193,9 @@ private:
     static constexpr const char* WRITE_TMP = "write-tmp";
     static constexpr const char* PLOIDY = "ploidy";
     static constexpr const char* MIN_MAPPING_QUALITY = "minimum-mapping-quality";
+    static constexpr const char* SAMPLE_NAME = "sample-name";
+    static constexpr const char* HETEROZYGOSITY = "heterozygosity";
+    static constexpr const char* INDEL_HETEROZYGOSITY = "indel-heterozygosity";
 };
 
 // clang-format off
@@ -222,7 +231,10 @@ inline RovacaToolArgs::RovacaToolArgs(int argc, char* argv[])
         DBSNP, po::value<std::string>(&dnsnp_file_), "dbSNP file")(
         WRITE_TMP, po::value<bool>(&writetmp_)->default_value(true)->implicit_value(true), "spill out-of-order results to temporary files to bound memory usage (default: true, use --write-tmp=false to disable)")(
         PLOIDY, po::value<int32_t>(&ploidy_)->default_value(2)->notifier([](const int32_t& value){valid_range(PLOIDY, value, PLOIDY_RANGE);}), "sample ploidy, must be in [1, 20] (default: 2)")(
-        MIN_MAPPING_QUALITY, po::value<int32_t>(&min_mapping_quality_)->default_value(20)->notifier([](const int32_t& value){valid_range(MIN_MAPPING_QUALITY, value, MIN_MAPPING_QUALITY_RANGE);}), "minimum mapping quality to keep reads, must be in [0, 255] (default: 20, same as GATK)");
+        MIN_MAPPING_QUALITY, po::value<int32_t>(&min_mapping_quality_)->default_value(20)->notifier([](const int32_t& value){valid_range(MIN_MAPPING_QUALITY, value, MIN_MAPPING_QUALITY_RANGE);}), "minimum mapping quality to keep reads, must be in [0, 255] (default: 20, same as GATK)")(
+        SAMPLE_NAME, po::value<std::string>(&sample_name_)->default_value(""), "sample name override; defaults to @RG/SM, @RG/ID, or the input filename")(
+        HETEROZYGOSITY, po::value<double>(&snp_heterozygosity_)->default_value(0.001), "SNP heterozygosity prior, must be in (0, 1) (default: 0.001)")(
+        INDEL_HETEROZYGOSITY, po::value<double>(&indel_heterozygosity_)->default_value(0.000125), "indel heterozygosity prior, must be in (0, 1) (default: 0.000125)");
     
     bqsr.add_options()(BQSR_RECAL_TABLE, po::value<std::string>(&recal_table_),"bqsr recal table file.");
     all.add(haplotypecaller).add(bqsr);
@@ -291,6 +303,9 @@ inline void RovacaToolArgs::usage()
     std::cout << "                                              available options: {NONE, HOSTILE, CONSERVATIVE, AGGRESSIVE}" << std::endl;
     std::cout << "      --ploidy <int>                          sample ploidy, must be in [1, 20] (default: 2)" << std::endl;
     std::cout << "      --minimum-mapping-quality <int>         minimum mapping quality to keep reads, must be in [0, 255] (default: 20)" << std::endl;
+    std::cout << "      --sample-name <str>                     sample name override (default: @RG/SM, @RG/ID, or input filename)" << std::endl;
+    std::cout << "      --heterozygosity <float>                SNP heterozygosity prior in (0, 1) (default: 0.001)" << std::endl;
+    std::cout << "      --indel-heterozygosity <float>          indel heterozygosity prior in (0, 1) (default: 0.000125)" << std::endl;
     std::cout << "      --emit-ref-confidence <str>             emit reference confidence score mode (default: NONE)" << std::endl;
     std::cout << "                                              available options: {NONE, GVCF}" << std::endl;
     std::cout << "      --nstreampool <int>                     iostream pool size, must be in [1, 20] (default: 10)" << std::endl;
@@ -317,6 +332,11 @@ inline bool RovacaToolArgs::valid_check()
     CHECK_FILE_EXIST(reference_file_);
     CHECK_FILE_READALBE(reference_file_);
     CHECK_FILE_WRITEABLE(out_file_.c_str());
+    if (!(snp_heterozygosity_ > 0.0 && snp_heterozygosity_ < 1.0) ||
+        !(indel_heterozygosity_ > 0.0 && indel_heterozygosity_ < 1.0)) {
+        RovacaLogger::error("--heterozygosity and --indel-heterozygosity must be in (0, 1)");
+        exit(EXIT_FAILURE);
+    }
     return true;
 }
 

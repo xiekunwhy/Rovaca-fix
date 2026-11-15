@@ -1,6 +1,7 @@
 #ifndef ROVACA_HC_GENOTYPE_ALLELE_COUNTS_MANGER_H_
 #define ROVACA_HC_GENOTYPE_ALLELE_COUNTS_MANGER_H_
 #include <algorithm>
+#include <limits>
 #include <memory>
 
 #include "forward.h"
@@ -70,10 +71,11 @@ private:
         auto& result = _allele_first_genotype_offset_by_ploidy;
         for (int32_t ploidy = 1; ploidy < row_count; ploidy++) {
             for (int32_t allele = 1; allele < col_count; allele++) {
-                result[ploidy][allele] = result[ploidy][allele - 1] + result[ploidy - 1][allele];
-                if (result[ploidy][allele] < result[ploidy][allele - 1]) {
-                    result[ploidy][allele] = s_genotype_count_overflow;
-                }
+                const int64_t count = static_cast<int64_t>(result[ploidy][allele - 1]) + result[ploidy - 1][allele];
+                const bool overflow = result[ploidy][allele - 1] == s_genotype_count_overflow ||
+                                      result[ploidy - 1][allele] == s_genotype_count_overflow ||
+                                      count > std::numeric_limits<int32_t>::max();
+                result[ploidy][allele] = overflow ? s_genotype_count_overflow : static_cast<int32_t>(count);
             }
         }
     }

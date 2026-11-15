@@ -80,7 +80,18 @@ TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几�
 
 ### 8. 缺失 `@RG` / `SM` 导致段错误（fix.6）
 
-创建 VCF header 时，原代码使用 `strstr(strstr(bam_hdr->text, "@RG"), "SM")` 提取样本名，但未检查空指针。BAM 没有 read group，或 read group 缺少 `SM` 时，会在输出索引的启动日志之后立即段错误。现在引擎与 Writer 统一通过 htslib 读取 tag，并按 `SM` → `ID` → `sample` 的顺序回退。缺失 `RG`、缺失 `SM` 两种输入均已通过 VCF/GVCF、40 线程和 ASan 验证；正常 `@RG/SM` 输入的 VCF 变异记录保持不变。
+创建 VCF header 时，原代码使用 `strstr(strstr(bam_hdr->text, "@RG"), "SM")` 提取样本名，但未检查空指针。BAM 没有 read group，或 read group 缺少 `SM` 时，会在输出索引的启动日志之后立即段错误。现在引擎与 Writer 统一通过 htslib 读取 tag，不再直接对字符串搜索结果解引用。缺失 `RG`、缺失 `SM` 两种输入均已通过 VCF/GVCF、40 线程和 ASan 验证；正常 `@RG/SM` 输入的 VCF 变异记录保持不变。fix.7 新增 `--sample-name`，最终回退样本名改为输入文件名，不再统一叫 `sample`。
+
+### 9. 整合的健壮性改进（fix.7）
+
+- Writer 固定 128 MB 的乱序数组改为稀疏表：省去预分配，并消除 `source_id` 超过旧数组大小后的越界风险；重复 source ID 会明确报错。
+- 空 GVCF 区域的 GT/PL 按请求倍性输出，不再写死为二倍体。
+- 新增 `--sample-name`、`--heterozygosity`、`--indel-heterozygosity`；默认先验仍为 GATK 兼容的 `0.001` 和 `0.000125`。样本名默认按 `SM` → `ID` → 输入文件名解析，显式参数可覆盖。
+- `--inspect-reads` 在 BAM 未声明 read group 时不再误过滤全部 reads。
+- genotype 偏移计算改用 `int64_t` 并传播溢出标记，计算器入口在分配前拒绝溢出；似然数量静态缓存直接覆盖 1–20 倍性。
+- read-group 解析和每个输入文件的 HTS 线程池/缓存初始化得到加固，不改变呼叫算法。
+
+对方提出的 `max-genotype-count` 等位基因剪枝重写**没有并入**：它会改变变异结果，且尚未完整保留 GVCF 等位与注释信息。fix.7 未改变任何等位剪枝行为。
 
 ## 验证情况
 
@@ -88,6 +99,7 @@ TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几�
 - **回归套件**（合成二倍体数据：12 条 contig、48 个设计 SNP/Indel）：VCF/GVCF、CRAM 输入、默认 TBI、`--index=false`、帮助文本——9/9 通过。
 - **落盘压力测试**（阈值强制为 0）：250 个结果落盘 → 回读 → 输出与正常跑逐字节一致，临时文件零残留。
 - **速度**：真实数据 chr12 运行时间与原版相同（Rovaca 对 GATK 约 60 倍的性能不受影响）。
+- **fix.7 整合验证**：正常二倍体 VCF 正文与 fix.6 完全一致；缺失 RG/ID 和样本名覆盖检查通过；无 RG 的 `--inspect-reads` 过滤数为 0；四倍体空块包含 4 个 GT 等位和 5 个 PL；199 个乱序 Writer 任务中 71 个落盘，最终 200 条记录顺序正确且临时文件零残留；相同四线程测试的峰值 RSS 从 1,834,716 KB 降至 1,703,988 KB（约 127.7 MiB）。
 
 ## 使用方法
 
@@ -141,7 +153,7 @@ bash build_static.sh        # 依赖自动获取到 third_lib/static-deps（不�
 
 见 [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases)：`rovaca`（x86-64、全静态、strip 后约 6 MB）。
 
-- sha256：`f52ef0601891ffe957021a605d5ff9c770fd7c225e07fb59fd6c0f8c9d92bb09`
+- sha256：`d66fde6b1c144e2e19db15f62cf636cfd94fd8a822c82c8e655a1cfe28eb577e`
 - 要求：x86-64 Linux，内核 ≥ 3.2，CPU 支持 AVX2（推荐 AVX-512）；免 root、无动态库依赖
 - `scp` 到集群 → `chmod +x rovaca` → 直接运行
 

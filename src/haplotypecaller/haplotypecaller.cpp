@@ -213,6 +213,9 @@ void HaplotypeCaller::init_args()
     genotype_args->init_reference_confidence_mode(hc_args->referenceConfidenceMode);
     genotype_args->writetmp = rovaca_args_->writetmp();
     genotype_args->sample_ploidy = rovaca_args_->ploidy();
+    genotype_args->snp_heterozygosity = rovaca_args_->heterozygosity();
+    genotype_args->indel_heterozygosity = rovaca_args_->indel_heterozygosity();
+    genotype_args->sample_name = samplelist_.empty() ? rovaca_args_->sample_name() : samplelist_.front();
 
     if (hc_args->referenceConfidenceMode == ReferenceConfidenceMode::GVCF) {
         std::string gvcf_gq_bands;
