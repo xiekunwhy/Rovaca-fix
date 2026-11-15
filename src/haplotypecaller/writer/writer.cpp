@@ -732,9 +732,15 @@ void Writer::generate_contig(bcf_hdr_t *hdr, bam_hdr_t *bam_hdr)
 
 void Writer::generate_samples(bcf_hdr_t *hdr, bam_hdr_t *bam_hdr)
 {
-    const char *q, *p = strstr(strstr(bam_hdr->text, "@RG"), "SM");
-    for (p += 3, q = p; *q && *q != '\t' && *q != '\n'; ++q) {}
-    std::string sample_name(p, q - p);
+    std::string sample_name{"sample"};
+    kstring_t value{0, 0, nullptr};
+    if (sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "SM", &value) == 0 && value.l > 0) {
+        sample_name.assign(value.s, value.l);
+    }
+    else if (sam_hdr_find_tag_pos(bam_hdr, "RG", 0, "ID", &value) == 0 && value.l > 0) {
+        sample_name.assign(value.s, value.l);
+    }
+    ks_free(&value);
     int32_t ret = bcf_hdr_add_sample(hdr, sample_name.c_str());
     CHECK_CONDITION_EXIT(ret != 0, "bcf_hdr_add_sample");
 }

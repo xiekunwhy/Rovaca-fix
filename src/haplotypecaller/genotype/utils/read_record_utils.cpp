@@ -107,11 +107,16 @@ Int64Uint32Pair ReadRecordUtils::get_read_index_for_reference_coordinate(pReadRe
 std::vector<std::string> ReadRecordUtils::get_samples_from_header(const std::vector<bam_hdr_t *> &headers)
 {
     std::vector<std::string> samples;
-    const char *q, *p;
     for (const auto &h : headers) {
-        p = strstr(strstr(h->text, "@RG"), "SM");
-        for (p += 3, q = p; *q && *q != '\t' && *q != '\n'; ++q) {}
-        std::string sample_name(p, q - p);
+        std::string sample_name{"sample"};
+        kstring_t value{0, 0, nullptr};
+        if (sam_hdr_find_tag_pos(h, "RG", 0, "SM", &value) == 0 && value.l > 0) {
+            sample_name.assign(value.s, value.l);
+        }
+        else if (sam_hdr_find_tag_pos(h, "RG", 0, "ID", &value) == 0 && value.l > 0) {
+            sample_name.assign(value.s, value.l);
+        }
+        ks_free(&value);
         if (std::find(samples.begin(), samples.end(), sample_name) == samples.end()) {
             samples.push_back(std::move(sample_name));
         }

@@ -78,6 +78,10 @@ TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几�
 
 验证：合成四倍体数据（60x，设计等位基因频率 0.25/0.5/0.75/1.0）——GT 判定为 `0/0/0/1`、`0/0/1/1`、`0/1/1/1`、`1/1/1/1`，VCF 与 GVCF 两种模式下 PL 区分度、MLEAC/MLEAF 均正确；二倍体输出在合成与真实数据回归集上与上一版**逐字节一致**。
 
+### 8. 缺失 `@RG` / `SM` 导致段错误（fix.6）
+
+创建 VCF header 时，原代码使用 `strstr(strstr(bam_hdr->text, "@RG"), "SM")` 提取样本名，但未检查空指针。BAM 没有 read group，或 read group 缺少 `SM` 时，会在输出索引的启动日志之后立即段错误。现在引擎与 Writer 统一通过 htslib 读取 tag，并按 `SM` → `ID` → `sample` 的顺序回退。缺失 `RG`、缺失 `SM` 两种输入均已通过 VCF/GVCF、40 线程和 ASan 验证；正常 `@RG/SM` 输入的 VCF 变异记录保持不变。
+
 ## 验证情况
 
 - **结果一致性**：修复版与原版同构建输出 200 万+ 行 GVCF **零差异**；静态版与动态版之间仅有 2 个位点 QUAL 相差 0.001（浮点末位抖动，基因型/PL 完全一致——与 GATK 官方文档中 native vs Java PairHMM 的说明同类）。
@@ -137,7 +141,7 @@ bash build_static.sh        # 依赖自动获取到 third_lib/static-deps（不�
 
 见 [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases)：`rovaca`（x86-64、全静态、strip 后约 6 MB）。
 
-- sha256：`19db8ed50d607d002efca5e7c3869d9c1c46fadba5a07c30cdb131be0e22ebd8`
+- sha256：`f52ef0601891ffe957021a605d5ff9c770fd7c225e07fb59fd6c0f8c9d92bb09`
 - 要求：x86-64 Linux，内核 ≥ 3.2，CPU 支持 AVX2（推荐 AVX-512）；免 root、无动态库依赖
 - `scp` 到集群 → `chmod +x rovaca` → 直接运行
 

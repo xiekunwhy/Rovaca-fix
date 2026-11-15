@@ -80,6 +80,10 @@ GATK-style arbitrary-ploidy genotyping is now enabled end-to-end (it was present
 
 Validated on a synthetic tetraploid set (designed allele fractions 0.25/0.5/0.75/1.0 at 60x): GT calls are `0/0/0/1`, `0/0/1/1`, `0/1/1/1`, `1/1/1/1` with correctly differentiated PLs in both VCF and GVCF modes; MLEAC/MLEAF are consistent; diploid output is byte-identical to the previous release on synthetic and real-data regression sets.
 
+### 8. Missing `@RG` / `SM` crash fix (fix.6)
+
+Creating the VCF header used `strstr(strstr(bam_hdr->text, "@RG"), "SM")` and dereferenced the result without checking it. A BAM without read groups, or with read groups lacking `SM`, therefore segfaulted immediately after the output-index startup message. Sample handling now uses htslib tag lookups and the same fallback on both the engine and Writer paths: `SM` → `ID` → `sample`. Verified for both missing-`RG` and missing-`SM` inputs in VCF/GVCF modes, including 40 threads and ASan; normal `@RG/SM` VCF records remain unchanged.
+
 ## Verification
 
 - **Output equivalence**: 2M+-line GVCF diff of fixed vs. original build: **0 differences**. Static vs. dynamic builds show only a ±0.001 QUAL last-bit FP jitter at 2 sites (calls, genotypes, PLs identical — same class as GATK's native-vs-Java PairHMM note).
@@ -139,7 +143,7 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `19db8ed50d607d002efca5e7c3869d9c1c46fadba5a07c30cdb131be0e22ebd8`
+- sha256: `f52ef0601891ffe957021a605d5ff9c770fd7c225e07fb59fd6c0f8c9d92bb09`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 

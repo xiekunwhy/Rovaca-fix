@@ -196,8 +196,15 @@ inline bool RovacaTool::initialize_bam()
 
     // Get sample list.
     for (auto &it : read_group_map_) {
-        if (it.count("SM")) samplelist_.emplace_back(it["SM"]);
+        if (it.count("SM") && !it["SM"].empty())
+            samplelist_.emplace_back(it["SM"]);
+        else if (it.count("ID") && !it["ID"].empty())
+            samplelist_.emplace_back(it["ID"]);
         if (it.count("ID")) read_group_id_.emplace_back(it["ID"]);
+    }
+    if (samplelist_.empty()) {
+        samplelist_.emplace_back("sample");
+        RovacaLogger::warn("no SM tag found in BAM header; using sample name 'sample'");
     }
     return !(bam_loader_ == nullptr || merged_header_ == nullptr);
 }
