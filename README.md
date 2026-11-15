@@ -57,7 +57,7 @@ The Writer must emit results in global `source_id` order; out-of-order results w
 
 ### 4. CSI index support (output side)
 
-TBI cannot index contigs ≥ 2^29 bp — on such genomes the run would previously die mid-write after hours of compute. The writer now detects long contigs and **automatically switches to CSI** (`.csi`, tabix-compatible meta). Verified with `tabix -l` and region queries on VCF and GVCF output. BAM/CRAM input indexes (`.bai`/`.csi`/`.crai`) were already handled by htslib.
+TBI cannot index contigs ≥ 2^29 bp — on such genomes the run would previously die mid-write after hours of compute. The writer detects long contigs and **automatically switches to CSI** (`.csi`). In fix.5, both TBI and CSI use htslib's own `hts_idx_tbi_name()` tid/meta path (the same path as `vcf_write`); the earlier custom CSI tid/meta construction was removed. Verified with official `tabix` on actual SNP and high-coordinate GVCF records, a multi-contig header, 40 threads, BAM CSI and CRAM CRAI input, BAI/TBI output, and body-identical output with `--index=false`. ASan found no error on the SNP→CSI write/query path. These index tests are not a substitute for validating variant calling on your own >512 Mb contigs.
 
 ### 5. CRAM input support
 
@@ -139,7 +139,7 @@ bash build_static.sh        # fetches deps into third_lib/static-deps (not commi
 
 See [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases): `rovaca` (x86-64, fully static, stripped, ~6 MB).
 
-- sha256: `08d1b1f5b31334d67c52a43b57a85a714cda35656741a80b8482c08d761e46bc`
+- sha256: `19db8ed50d607d002efca5e7c3869d9c1c46fadba5a07c30cdb131be0e22ebd8`
 - Requirements: x86-64 Linux, kernel ≥ 3.2, CPU with AVX2 (AVX-512 preferred). No root, no shared libraries.
 - `scp` it to your cluster, `chmod +x rovaca`, run.
 

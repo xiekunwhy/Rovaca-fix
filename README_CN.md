@@ -55,7 +55,7 @@ Writer 必须按全局 `source_id` 顺序写出，乱序结果**无上限**地�
 
 ### 4. CSI 索引（输出侧）
 
-TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几个小时之后建索引时报错退出。现在 Writer 检测到长 contig 会**自动切换为 CSI**（`.csi`，与 tabix 完全兼容的 meta）。已用官方 `tabix -l` 与区间查询在 VCF/GVCF 两种输出上验证。输入侧 BAM 的 `.bai`/`.csi`、CRAM 的 `.crai` 索引由 htslib 原生支持（`.csi` 优先探测）。
+TBI 索引单条 contig 上限 2^29 bp（512Mb）——超过就会在算了几个小时之后建索引时报错退出。Writer 检测到长 contig 会**自动切换为 CSI**（`.csi`）。fix.5 中，TBI/CSI 统一走 htslib 自己的 `hts_idx_tbi_name()` tid/meta 路径（与 `vcf_write` 相同），删除了此前自定义的 CSI tid/meta 构建。已用官方 `tabix` 验证真实 SNP 和高坐标 GVCF 记录、多 contig header、40 线程、BAM CSI 与 CRAM CRAI 输入、BAI/TBI 输出，并确认开启/关闭索引的 VCF 正文完全一致；ASan 在 SNP→CSI 写入/查询路径未发现内存错误。索引测试不能替代对你自己的 >512Mb contig 做变异呼叫验证。
 
 ### 5. CRAM 输入
 
@@ -137,7 +137,7 @@ bash build_static.sh        # 依赖自动获取到 third_lib/static-deps（不�
 
 见 [Releases](https://github.com/xiekunwhy/Rovaca-fix/releases)：`rovaca`（x86-64、全静态、strip 后约 6 MB）。
 
-- sha256：`08d1b1f5b31334d67c52a43b57a85a714cda35656741a80b8482c08d761e46bc`
+- sha256：`19db8ed50d607d002efca5e7c3869d9c1c46fadba5a07c30cdb131be0e22ebd8`
 - 要求：x86-64 Linux，内核 ≥ 3.2，CPU 支持 AVX2（推荐 AVX-512）；免 root、无动态库依赖
 - `scp` 到集群 → `chmod +x rovaca` → 直接运行
 

@@ -20,7 +20,6 @@
 #include "htslib/hts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
-#include "htslib/tbx.h"
 #include "htslib/vcf.h"
 #include "rovaca_logger.h"
 #include "writer.h"
@@ -287,7 +286,6 @@ void Writer::merge_task_thread_call()
     }
 
     if (!args_->idx_name.empty()) {
-        if (csi_) set_csi_meta();
         ret = bcf_idx_save(out_.out_file);
         CHECK_CONDITION_EXIT(ret != 0, "failed to build index");
     }
@@ -298,7 +296,6 @@ void Writer::merge_task_thread_call()
 void Writer::close_file()
 {
     if (!args_->idx_name.empty()) {
-        if (csi_) set_csi_meta();
         int ret = bcf_idx_save(out_.out_file);
         CHECK_CONDITION_EXIT(ret != 0, "failed to build index");
     }
@@ -307,36 +304,9 @@ void Writer::close_file()
 
 int32_t Writer::index_tid_for_push(int32_t tid, const char* contig_name)
 {
-    if (csi_) {
-        return tid;
-    }
     int32_t btid = hts_idx_tbi_name(out_.out_file->idx, tid, contig_name);
     CHECK_CONDITION_EXIT(btid == -1, "error: hts_idx_tbi_name");
     return btid;
-}
-
-void Writer::set_csi_meta()
-{
-    // 与 tabix 的 VCF CSI meta 布局一致：28 字节 tbx_conf 前缀 + 以 '\0' 分隔的目标名（header 顺序）
-    uint32_t x[7];
-    const tbx_conf_t conf = tbx_conf_vcf;
-    std::memcpy(x, &conf, 24);
-    size_t l_nm = 0;
-    for (int32_t i = 0; i < bam_hdr_->n_targets; ++i) {
-        l_nm += std::strlen(bam_hdr_->target_name[i]) + 1;
-    }
-    x[6] = static_cast<uint32_t>(l_nm);
-
-    std::vector<uint8_t> meta(28 + l_nm);
-    std::memcpy(meta.data(), x, 28);
-    size_t off = 28;
-    for (int32_t i = 0; i < bam_hdr_->n_targets; ++i) {
-        const size_t len = std::strlen(bam_hdr_->target_name[i]) + 1;
-        std::memcpy(meta.data() + off, bam_hdr_->target_name[i], len);
-        off += len;
-    }
-    int32_t ret = hts_idx_set_meta(out_.out_file->idx, static_cast<uint32_t>(meta.size()), meta.data(), 1);
-    CHECK_CONDITION_EXIT(ret != 0, "error: hts_idx_set_meta");
 }
 
 bool Writer::check_deletion_variant(const std::shared_ptr<char> &ref, kstring_t *s, size_t *current_offset)
